@@ -20,7 +20,7 @@ This document describes how the Stage 1 code is organised, how later milestones 
 |---|---|---|---|
 | `gb-config` | exists | M0 | Typed parameters for every SPEC §2 row (value, status D/P/O, sweep), M1 grids, run settings; TOML loading by deep merge over defaults. |
 | `gb-runlog` | exists | M0 | Run id, git commit and dirty flag, UTC timestamp, resolved-config hash, SHA-256 manifest of outputs, seeded ChaCha20 streams. |
-| `gb-analytic` | M1 | M1 | Exact closed forms and exact probabilities (sections A–F), with independent cross-checks. Pure functions; no I/O. |
+| `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–F), with independent cross-checks. Pure functions; no I/O. |
 | `gb-cli` | exists | M0+ | Binary `gb`: loads config, runs analyses, writes CSV/PNG/SUMMARY and the run log. Front end only; never recomputes results. |
 | `gb-protocol` | planned | M2 | Shared protocol core, listed in section 5. |
 | `gb-crypto-tests` | planned | M2 | Micro-tests with real SHA-256 and BLS12-381: S11 grinding, S14, proof of possession, equivocation, and equivalence tests for any abstraction a simulator uses. |

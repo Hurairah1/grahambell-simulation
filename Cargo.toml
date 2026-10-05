@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/gb-config",
     "crates/gb-runlog",
+    "crates/gb-analytic",
     "crates/gb-cli",
 ]
 

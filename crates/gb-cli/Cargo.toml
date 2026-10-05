@@ -12,9 +12,17 @@ path = "src/main.rs"
 
 [dependencies]
 gb-config.workspace = true
+gb-runlog.workspace = true
+gb-analytic.workspace = true
+serde.workspace = true
 csv.workspace = true
 clap.workspace = true
 anyhow.workspace = true
+plotters.workspace = true
+libm.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

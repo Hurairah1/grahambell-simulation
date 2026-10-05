@@ -1,0 +1,23 @@
+[package]
+name = "gb-analytic"
+description = "M1 analytical baseline for GrahamBell Stage 1: exact closed-form and exact-probability ground truth."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gb-config.workspace = true
+gb-runlog.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+num-integer.workspace = true
+libm.workspace = true
+rand_core.workspace = true
+rand_chacha.workspace = true
+
+[lints]
+workspace = true
