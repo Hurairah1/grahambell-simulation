@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/gb-config",
+    "crates/gb-runlog",
+    "crates/gb-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[workspace.dependencies]
+gb-config = { path = "crates/gb-config" }
+gb-runlog = { path = "crates/gb-runlog" }
+gb-analytic = { path = "crates/gb-analytic" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+csv = "1.4"
+clap = { version = "4.6", features = ["derive"] }
+thiserror = "2"
+anyhow = "1.0"
+sha2 = "0.10"
+rand_core = "0.10"
+rand_chacha = "0.10"
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"
+num-integer = "0.1"
+libm = "0.2"
+plotters = { version = "0.3.7", default-features = false, features = [
+    "bitmap_backend",
+    "bitmap_encoder",
+    "line_series",
+    "point_series",
+    "ab_glyph",
+] }
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+
+# Monte Carlo cross-checks run inside `cargo test`; optimise them so the suite stays fast.
+[profile.test]
+opt-level = 2

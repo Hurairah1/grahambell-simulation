@@ -1,0 +1,5 @@
+/target/
+/results/*
+!/results/README.md
+/.history/
+.DS_Store

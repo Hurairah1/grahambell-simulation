@@ -1,0 +1,164 @@
+# GrahamBell Stage 1 — default configuration.
+#
+# This file mirrors `Config::default()` in crates/gb-config; a test fails if they differ.
+# Each protocol parameter is `{ value, status, sweep }`:
+#   status  D = decided, P = proposed (compare against the alternative), O = open (sweep it).
+#   sweep   `values` lists sweep/comparison values; `range` is an inclusive [min, max].
+# A parameter without `value` has the SPEC default "—" (not yet chosen).
+#
+# To run with different values, write a small file containing only the keys you change, e.g.
+#   [genesis]
+#   ids.value = 3000000
+# and pass it with `gb analytic --config my.toml`. Status tags cannot be changed.
+
+# ---------------------------------------------------------------- SPEC §2: hash pacing
+[pacing]
+hashes_per_second = { value = 1.0, status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2, §3.5, §3.7, §3.9: PoW-ID issuance
+[issuance]
+pow_id_target_interval_s = { value = 30.0, status = "D" }
+rate_mode = { value = "fixed", status = "P", sweep = { values = ["fixed", "adaptive"], note = "fixed is decided; adaptive is the proposed variant (SPEC §3.9)" } }
+min_attack_time_floor_years = { value = 2.0, status = "P", sweep = { range = [1.0, 10.0] } }
+cap_checkpoint_interval_fraction_of_t_min = { status = "O", sweep = { values = [0.25, 0.5, 1.0] } }
+confirmation_depth_blocks = { value = 6, status = "O", sweep = { range = [3, 12] } }
+start_rule = { value = "a", status = "D", sweep = { values = ["a", "b"], note = "rule (b) is the rejected alternative, kept for S13" } }
+same_height_tie_break = { value = "lower_block_hash", status = "P", sweep = { values = ["lower_block_hash", "first_seen"] } }
+
+# ---------------------------------------------------------------- SPEC §2, §5: transaction layer
+[transactions]
+pow_tx_interval_s = { value = 10.0, status = "O", sweep = { range = [1.0, 10.0] } }
+
+# ---------------------------------------------------------------- SPEC §2, §4.1: Witness Chains
+[witness]
+wc_size = { value = 10, status = "D" }
+subordinate_wcs_per_kwc = { value = 3, status = "D", sweep = { values = [3, 2], note = "1 + 2 (30 nodes) for comparison" } }
+kwc_count_rule = { value = "equals_wc_count", status = "D" }
+watched_registered_per_node = { value = 800, status = "D" }
+watched_unregistered_per_node = { value = 200, status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2: PoWit quorums
+[quorum]
+registered_leader_min = { value = 7, status = "D" }
+registered_subordinate_min = { value = 21, status = "D" }
+registered_subordinate_min_30_node = { value = 14, status = "D" }
+unregistered_total_min = { value = 27, status = "D" }
+unregistered_total_min_30_node = { value = 20, status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2, §3.4: entropy lock
+[entropy]
+signers = { value = "all_online_members", status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2: capacity
+[capacity]
+miners_per_leader_wc = { value = 250, status = "D" }
+unregistered_per_leader_wc = { value = 50, status = "O", sweep = { values = [50, 150, 235], note = "registered/unregistered split 200/50, 100/150, 15/235" } }
+spare_target_fraction = { value = 0.33, status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2: network limits
+[network]
+node_request_rate_limit_per_s = { value = 1000, status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2: timing
+[timing]
+grace_epoch_rounds = { value = 5, status = "D" }
+clock_tolerance_s = { value = 2.0, status = "O", sweep = { range = [0.5, 10.0] } }
+
+# ---------------------------------------------------------------- SPEC §2, §3.1: admission
+[admission]
+post_admission_wait_rounds = { value = 5, status = "O", sweep = { range = [1, 10] } }
+convergence_interval_epochs = { value = 1.0, status = "O", sweep = { range = [0.5, 3.0] } }
+peer_bootstrap_count = { value = 8, status = "D", sweep = { range = [4, 8] } }
+
+# ---------------------------------------------------------------- SPEC §2, §4.3: Chain Allocation Committee
+[cac]
+size = { value = 600, status = "D", sweep = { range = [100, 1000], note = "100–1,000 for comparison" } }
+membership_policy = { value = "first_in_first_out", status = "D" }
+join_every_n_tx_blocks = { value = 10, status = "D" }
+approval_threshold = { value = { numerator = 2, denominator = 3 }, status = "D" }
+seat_rule = { value = "next_non_member", status = "P", sweep = { values = ["next_non_member", "allow_duplicates"] } }
+
+# ---------------------------------------------------------------- SPEC §2: genesis
+[genesis]
+ids = { value = 2100000, status = "D", sweep = { values = [500000, 1000000, 2000000, 2100000, 3000000] } }
+distribution = { value = "kyc_one_per_verified_person", status = "D" }
+secretly_controlled_fraction = { value = 0.0, status = "O", sweep = { range = [0.0, 0.2] } }
+
+# ---------------------------------------------------------------- SPEC §2, §4.7: offline handling (seconds)
+[offline]
+deactivation_threshold_s = { status = "O", sweep = { values = [3600.0, 21600.0, 86400.0, 259200.0, 604800.0] } }
+reactivation_wait_s = { status = "O", sweep = { values = [86400.0, 604800.0, 1209600.0, 2592000.0] } }
+
+# ---------------------------------------------------------------- SPEC §2, §4.8: penalties (seconds)
+[penalties]
+suspension_ladder_s = { value = [86400, 2592000], status = "D" }
+final_step = { value = "permanent", status = "D" }
+
+# ---------------------------------------------------------------- SPEC §2: cryptography
+[crypto]
+signature_scheme = { value = "bls12_381_aggregate_bitfield_pop", status = "D" }
+hash_function = { value = "sha256", status = "P" }
+
+# ================================================================ Modelling constants (not protocol parameters)
+[model]
+# 365-day year: R = 31,536,000 / 30 = 1,051,200 IDs per year.
+seconds_per_year = 31536000
+
+# ================================================================ M1 analysis grids
+[analytic.time_to_threshold]
+genesis_ids = [500000, 1000000, 2000000, 2100000, 3000000]
+attacker_shares = [0.05, 0.1, 0.2, 0.25, 0.3, 0.34, 0.4, 0.52, 0.55, 0.6, 0.75, 1.0]
+thresholds = [0.33, 0.51, 0.67]
+online_fractions = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+honest_growth_multiples_of_r = [0.0, 0.5, 1.0, 2.0]
+t_min_years = [1.0, 2.0, 5.0, 10.0]
+checkpoint_fractions_of_t_min = [0.25, 0.5, 1.0]
+floor_threshold = 0.51
+trajectory_horizon_years = 50.0
+trajectory_step_years = 0.5
+
+[analytic.witness]
+attacker_fractions = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.33, 0.4]
+kwc_counts = [10000, 100000, 1000000]
+composition_horizon_years = 10.0
+composition_initial_kwc_counts = [10000, 100000, 210000, 1000000]
+ban_replacement_rates_per_year = [0.0, 0.01, 0.05]
+
+[analytic.cac]
+committee_sizes = [30, 100, 600, 1000]
+attacker_fractions = [0.1, 0.2, 0.25, 0.3, 0.33, 0.4]
+mining_population = 2100000
+honest_mining_fractions = [0.5, 0.7, 1.0]
+
+[analytic.restart]
+competing_miners = [1000000, 5000000]
+restart_costs_s = [60.0, 300.0, 600.0]
+keep_windows_s = [3600, 86400, 259200]
+
+[analytic.hopping]
+window_blocks = [144, 2016]
+attacker_ratios = [0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0]
+clamp_factor = 4.0
+
+[analytic.ties]
+competing_miners = [1000000, 5000000]
+intervals_s = [10.0, 30.0, 60.0]
+max_tie_size = 4
+
+# ================================================================ Run settings
+[run]
+seed = 20261005
+
+[run.monte_carlo]
+issuance_replicates = 400
+issuance_genesis_ids = 10000
+partition_replicates = 2000
+partition_wcs = 1000
+committee_refreshes = 4000000
+committee_population = 10000
+restart_successes = 20000
+per_round_trials = 20000
+hopping_replicates = 4000
+tie_rounds = 200000
+tie_miners = 200
+tolerance_standard_errors = 5.0
