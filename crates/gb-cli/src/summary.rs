@@ -102,6 +102,15 @@ pub(crate) fn pct(value: f64) -> String {
     }
 }
 
+/// A multiple of T_min in words: `T_min` for 1, otherwise for example `0.5 T_min`.
+pub(crate) fn t_min_multiple(x: f64) -> String {
+    if x == 1.0 {
+        "T_min".to_string()
+    } else {
+        format!("{} T_min", compact_number(x))
+    }
+}
+
 /// An input share from the configuration grid, for example `5%` or `33%`.
 pub(crate) fn share(value: f64) -> String {
     format!("{}%", compact_number(100.0 * value))
@@ -622,11 +631,11 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
         line(
             out,
             &format!(
-                "**SPEC v0.3 default:** k = {:.4} with checkpoints every {} T_min. Its worst-start time is {} T_min, so a 100%-capture attacker cannot reach {} in less than T_min at any start phase (cross-checks `A-cap-configured-floor` and `A-cap-configured-vs-grid`). A factor k above 1 tightens the cap; below 1, the floor already holds with room to spare.",
+                "**SPEC v0.3 default:** k = {:.4} with checkpoints every {}. Its worst-start time is {} T_min, so a 100%-capture attacker cannot reach {} in less than T_min at any start phase (cross-checks `A-cap-configured-floor` and `A-cap-configured-vs-grid`). A factor k above 1 tightens the cap; below 1, the floor already holds with room to spare.",
                 configured.safety_factor.unwrap_or(f64::NAN),
                 configured
                     .checkpoint_interval_fraction_of_t_min
-                    .map_or("?".to_string(), compact_number),
+                    .map_or("?".to_string(), t_min_multiple),
                 configured
                     .time_in_t_min
                     .map_or("—".to_string(), |t| format!("{t:.3}")),
@@ -2033,6 +2042,12 @@ mod tests {
         let mut out = String::new();
         table(&mut out, &strings(&["a", "b"]), &[strings(&["1", "2"])]);
         assert_eq!(out, "| a | b |\n|---|---|\n| 1 | 2 |\n\n");
+    }
+
+    #[test]
+    fn multiples_of_t_min_drop_a_leading_one() {
+        assert_eq!(t_min_multiple(1.0), "T_min");
+        assert_eq!(t_min_multiple(0.25), "0.25 T_min");
     }
 
     #[test]

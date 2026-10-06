@@ -8,7 +8,7 @@
 //! written.
 
 use crate::charts::{compact_number, short_count};
-use crate::summary::{DISCLOSURE, prob, share, sig3};
+use crate::summary::{DISCLOSURE, prob, share, sig3, t_min_multiple};
 use gb_analytic::M1Results;
 use gb_analytic::cac::CommitteeModel;
 use gb_analytic::restart::REALISTIC_COST;
@@ -235,8 +235,8 @@ fn worst_case(out: &mut String, config: &Config, results: &M1Results) {
         line(
             out,
             &format!(
-                "An optional adaptive rate is capped by registered IDs, recalculated at checkpoints every {} T_min. Without a safety factor, an attacker that times its start against the public checkpoint schedule reaches 51% in {} T_min. The safety factor k = {}/{} adopted in SPEC v0.3 restores the floor: the worst-start time becomes {:.3} T_min.",
-                compact_number(c.checkpoint_interval_fraction_of_t_min.unwrap_or(f64::NAN)),
+                "An optional adaptive rate is capped by registered IDs, recalculated at checkpoints every {}. Without a safety factor, an attacker that times its start against the public checkpoint schedule reaches 51% in {} T_min. The safety factor k = {}/{} adopted in SPEC v0.3 restores the floor: the worst-start time becomes {:.3} T_min.",
+                t_min_multiple(c.checkpoint_interval_fraction_of_t_min.unwrap_or(f64::NAN)),
                 sig3(u.worst_time_in_t_min_without_factor),
                 k.numerator,
                 k.denominator,

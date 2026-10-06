@@ -32,7 +32,7 @@ If the attacker wins 100% of new IDs and every honest ID stays online, reaching 
 
 A 2-year floor at the fixed rate needs 2.02M active IDs. With 2.9M genesis IDs it holds while at least 69.7% of them stay active.
 
-An optional adaptive rate is capped by registered IDs, recalculated at checkpoints every 1 T_min. Without a safety factor, an attacker that times its start against the public checkpoint schedule reaches 51% in 0.857 T_min. The safety factor k = 7/6 adopted in SPEC v0.3 restores the floor: the worst-start time becomes 1.000 T_min.
+An optional adaptive rate is capped by registered IDs, recalculated at checkpoints every T_min. Without a safety factor, an attacker that times its start against the public checkpoint schedule reaches 51% in 0.857 T_min. The safety factor k = 7/6 adopted in SPEC v0.3 restores the floor: the worst-start time becomes 1.000 T_min.
 
 ## Restart attack, before and after per-round entropy
 

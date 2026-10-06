@@ -458,7 +458,7 @@ Decisions by the protocol architect, recorded after reviewing the M1 results.
   - The new member is drawn before the oldest leaves, from the list as of block B.
   - Added a note that 256-bit hashes make the modulo bias negligible, and a list of the leader block's duties.
   - Stalling is accepted for now because allocation is deterministic; M4 tests the impact.
-  - Reason: the attacker's committee share now equals its share of active IDs, independent of mining power, and the committee can announce placements but not choose them.
+  - Reason: the attacker's expected committee share now equals its share of active IDs, independent of mining power, and the committee can announce placements but not choose them.
 - **§4.6–§4.7.** Offline beyond the allowance leads to deactivation, never a ban. Bans are only for proven misbehaviour, and the full 40-member KWC votes on bans, MOBu/MOBr and offline requests. Durations stay [O] and swept. Reason: honest household downtime must not cost an ID.
 - **§2 capacity.** Footnote ² notes that 200 registered miners per leader WC cannot be reached network-wide. The split stays a sweep. Reason: each ID mines at most one channel, so a KWC averages at most 10 registered miners.
 - **§8.**
