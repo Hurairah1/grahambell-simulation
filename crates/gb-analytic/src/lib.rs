@@ -12,6 +12,7 @@
 //! | D — restart attack, old vs per-round entropy | [`restart`] | §3.4, §8 S5, §10 H4 |
 //! | E — difficulty hopping | [`hopping`] | §3.8, §8 S6, §10 H5 |
 //! | F — same-step ties between PoW-ID blocks | [`ties`] | §3.5, §3.7 |
+//! | G — quorum trade-off: stall, sign alone, conflicting approvals | [`quorum_tradeoff`] | §2, §3.7, §4.2–§4.6 |
 //!
 //! Supporting modules:
 //!
@@ -29,6 +30,7 @@ pub mod exact;
 pub mod hopping;
 pub mod logspace;
 pub mod mc;
+pub mod quorum_tradeoff;
 pub mod restart;
 pub mod ties;
 pub mod time_threshold;
@@ -57,6 +59,8 @@ pub struct M1Results {
     pub e: Vec<hopping::HopRow>,
     /// Section F table.
     pub f: Vec<ties::TieRow>,
+    /// Section G tables.
+    pub g: quorum_tradeoff::SectionG,
     /// All cross-checks, in section order.
     pub checks: Vec<Check>,
 }
@@ -77,12 +81,14 @@ pub fn run(config: &Config) -> Result<M1Results> {
     let d_curve = restart::advantage_curve(config)?;
     let e = hopping::section_e(config)?;
     let f = ties::section_f(config)?;
+    let g = quorum_tradeoff::section_g(config)?;
     let mut checks = time_threshold::checks(config)?;
     checks.extend(witness::checks(config, &b)?);
     checks.extend(cac::checks(config)?);
     checks.extend(restart::checks(config)?);
     checks.extend(hopping::checks(config)?);
     checks.extend(ties::checks(config)?);
+    checks.extend(quorum_tradeoff::checks(config, &g, &c)?);
     Ok(M1Results {
         a,
         b,
@@ -91,6 +97,7 @@ pub fn run(config: &Config) -> Result<M1Results> {
         d_curve,
         e,
         f,
+        g,
         checks,
     })
 }

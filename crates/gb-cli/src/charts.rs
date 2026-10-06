@@ -7,8 +7,8 @@
 //! - a legend whenever two or more series are shown;
 //! - one y-axis per panel, with small multiples when magnitudes differ.
 //!
-//! Ordered series (genesis size, committee size, online fraction, restart cost) use steps of
-//! one blue ramp; unordered pairs use the first categorical slots. Both colour sets were
+//! Ordered series (genesis size, committee size, online fraction, restart cost, quorum) use
+//! steps of one blue ramp; unordered series use the first categorical slots. Both colour sets were
 //! checked with a colour-vision-deficiency validator. Text is rendered with the bundled
 //! DejaVu Sans font, so output does not depend on fonts installed on the machine.
 //!
@@ -17,6 +17,10 @@
 //! `f64` range drawable.
 
 use gb_analytic::M1Results;
+use gb_analytic::cac::CommitteeModel;
+use gb_analytic::quorum_tradeoff::POOL_LAYOUT;
+use gb_analytic::restart::REALISTIC_COST;
+use gb_analytic::time_threshold::CAP_WITH_SAFETY_FACTOR;
 use gb_analytic::witness::KwcState;
 use plotters::prelude::*;
 use plotters::style::text_anchor::{HPos, Pos, VPos};
@@ -444,6 +448,7 @@ pub const CHART_FILES: &[&str] = &[
     "B4_kwc_compositions_10y.png",
     "C1_cac_probabilities.png",
     "D1_restart_advantage.png",
+    "G1_quorum_tradeoff.png",
 ];
 
 /// Draws every chart into `dir`.
@@ -459,6 +464,7 @@ pub fn draw_all(dir: &Path, results: &M1Results) -> anyhow::Result<()> {
         kwc_compositions(results),
         cac_probabilities(results),
         restart_advantage(results),
+        quorum_tradeoff(results),
     ];
     for (name, figure) in CHART_FILES.iter().zip(figures) {
         draw_figure(&dir.join(name), &figure)?;
@@ -472,8 +478,14 @@ fn time_to_threshold(results: &M1Results) -> Figure {
     let all_genesis = distinct(rows.iter().map(|r| r.genesis_ids as f64));
     let genesis = pick(
         &all_genesis,
-        &[500_000.0, 1_000_000.0, 2_100_000.0, 3_000_000.0],
-        4,
+        &[
+            1_000_000.0,
+            2_100_000.0,
+            2_900_000.0,
+            5_000_000.0,
+            10_000_000.0,
+        ],
+        5,
     );
     let colors = ramp(genesis.len());
     let panels = thresholds
@@ -505,7 +517,7 @@ fn time_to_threshold(results: &M1Results) -> Figure {
         .collect();
     Figure {
         title: "Years until an attacker holds a share T of active IDs".to_string(),
-        subtitle: "Base model: attacker wins share s of new IDs; G = historical active base (all five sizes are in A1_time_to_threshold.csv). Shares s ≤ T never reach T.".to_string(),
+        subtitle: "Base model: attacker wins share s of new IDs; G = historical active base (default 2.9M). Shares s ≤ T never reach T.".to_string(),
         panels,
         size: (1800, 640),
     }
@@ -554,7 +566,7 @@ fn adaptive_cap(results: &M1Results) -> Figure {
     }
     Figure {
         title: "Adaptive cap: time for a 100%-capture attacker to reach 51%".to_string(),
-        subtitle: "Worst-case bound. x = 0 is a continuously updated cap; other points recalculate it at checkpoints. \"Frozen cap\": rate fixed at attack start.".to_string(),
+        subtitle: "Worst-case bound. x = 0 is a continuously updated cap; other points recalculate it at checkpoints. SPEC default: k = 7/6, checkpoints every T_min.".to_string(),
         panels: vec![Panel {
             title: "Time to majority, in units of T_min".to_string(),
             x_label: "checkpoint interval (fraction of T_min)".to_string(),
@@ -572,6 +584,18 @@ fn adaptive_cap(results: &M1Results) -> Figure {
                     label: "attack starts at the worst moment".to_string(),
                     points: series_for("checkpoint worst phase"),
                     color: CATEGORICAL[1],
+                    markers: true,
+                },
+                Series {
+                    label: "worst moment, cap with safety factor k".to_string(),
+                    points: rows
+                        .iter()
+                        .filter(|r| r.model == CAP_WITH_SAFETY_FACTOR)
+                        .filter_map(|r| {
+                            Some((r.checkpoint_interval_fraction_of_t_min?, r.time_in_t_min?))
+                        })
+                        .collect(),
+                    color: CATEGORICAL[2],
                     markers: true,
                 },
             ],
@@ -626,6 +650,8 @@ fn share_trajectories(results: &M1Results) -> Figure {
 
 fn genesis_to_issue(results: &M1Results) -> Figure {
     let rows = &results.a.genesis;
+    // The trajectory table is built at the configured genesis size.
+    let default_genesis = results.a.trajectories.first().map_or(0, |r| r.genesis_ids);
     let floors = distinct(rows.iter().map(|r| r.t_min_years));
     let colors = ramp(floors.len());
     let max_issue = rows
@@ -656,8 +682,8 @@ fn genesis_to_issue(results: &M1Results) -> Figure {
                 })
                 .collect(),
             references: vec![Reference {
-                label: "default 2.1M".to_string(),
-                value: 2.1,
+                label: format!("default {}", short_count(default_genesis)),
+                value: default_genesis as f64 / 1e6,
             }],
             legend: SeriesLabelPosition::UpperRight,
             y_range: Some((0.0, 1.08 * max_issue)),
@@ -755,7 +781,11 @@ fn kwc_compositions(results: &M1Results) -> Figure {
         .b
         .compositions
         .iter()
-        .filter(|r| r.initial_kwcs == 100_000 && r.ban_replacement_rate_per_year == 0.0)
+        .filter(|r| {
+            r.initial_kwcs == 100_000
+                && r.ban_rate_per_year == 0.0
+                && r.deactivation_cycles_per_id_per_year == 0.0
+        })
         .collect();
     let series = [
         ("registered", "registered quorum (7 + 21)"),
@@ -779,8 +809,8 @@ fn kwc_compositions(results: &M1Results) -> Figure {
     .collect();
     let horizon = rows.first().map(|r| r.horizon_years).unwrap_or(10.0);
     Figure {
-        title: format!("Expected sign-capable KWC compositions over {} years", compact_number(horizon)),
-        subtitle: "SPEC §10 H6 refresh model: 100,000 KWCs at the start, one new KWC per 10 new IDs, no bans; every composition counted as an independent draw.".to_string(),
+        title: format!("Expected KWC compositions able to sign without honest members over {} years", compact_number(horizon)),
+        subtitle: "SPEC §10 H6 refresh model under the adopted allocation (SPEC §4.2): 100,000 KWCs at the start, about 4.7 compositions per new ID, no bans, no deactivation.".to_string(),
         panels: vec![Panel {
             title: "Expected compositions in state (ii) (log scale)".to_string(),
             x_label: "attacker fraction of registered IDs, p".to_string(),
@@ -800,17 +830,23 @@ fn kwc_compositions(results: &M1Results) -> Figure {
 }
 
 fn cac_probabilities(results: &M1Results) -> Figure {
+    let primary = CommitteeModel::LotterySpread {
+        population: 1,
+        attackers: 0,
+    }
+    .label();
     let rows: Vec<_> = results
         .c
         .odds
         .iter()
-        .filter(|r| r.mining_population.is_some() && r.honest_mining_fraction == 1.0)
+        .filter(|r| r.model == primary)
         .collect();
+    let active = rows.first().map_or(0, |r| r.population);
     let sizes = distinct(rows.iter().map(|r| r.committee_size as f64));
     let colors = ramp(sizes.len());
     let panel = |title: &str, capture: bool| Panel {
         title: title.to_string(),
-        x_label: "attacker fraction of mining IDs, p".to_string(),
+        x_label: "attacker fraction of active IDs, p".to_string(),
         y_label: "probability (log scale)".to_string(),
         x_scale: Scale::Linear,
         y_scale: Scale::Log10,
@@ -841,8 +877,14 @@ fn cac_probabilities(results: &M1Results) -> Figure {
     };
     Figure {
         title: "Chain Allocation Committee: chance of stalling or capture".to_string(),
-        subtitle: "Exact, one seat per ID, all IDs mining (2.1M). Stall: ≥ n − ⌈2n/3⌉ + 1 seats. Capture: ≥ ⌈2n/3⌉ seats.".to_string(),
-        panels: vec![panel("Attacker can stall", false), panel("Attacker holds two-thirds", true)],
+        subtitle: format!(
+            "Exact, seat lottery over {} active IDs (attacker IDs spread through the list). Stall: ≥ n − ⌈2n/3⌉ + 1 seats. Capture: ≥ ⌈2n/3⌉ seats.",
+            short_count(active)
+        ),
+        panels: vec![
+            panel("Attacker can stall", false),
+            panel("Attacker holds two-thirds", true),
+        ],
         size: (1700, 680),
     }
 }
@@ -852,6 +894,16 @@ fn restart_advantage(results: &M1Results) -> Figure {
     let miners = distinct(rows.iter().map(|r| r.competing_miners as f64));
     let costs = distinct(rows.iter().map(|r| r.restart_cost_s));
     let colors = ramp(costs.len());
+    let cost_label = |c: f64| {
+        let realistic = rows
+            .iter()
+            .any(|r| r.restart_cost_s == c && r.cost_case == REALISTIC_COST);
+        if realistic {
+            format!("C = {} s (realistic)", compact_number(c))
+        } else {
+            format!("restart cost C = {} s", compact_number(c))
+        }
+    };
     let panels = miners
         .iter()
         .map(|n| Panel {
@@ -864,7 +916,7 @@ fn restart_advantage(results: &M1Results) -> Figure {
                 .iter()
                 .zip(colors.iter().cycle())
                 .map(|(c, color)| Series {
-                    label: format!("restart cost C = {} s", compact_number(*c)),
+                    label: cost_label(*c),
                     points: rows
                         .iter()
                         .filter(|r| r.competing_miners as f64 == *n && r.restart_cost_s == *c)
@@ -892,6 +944,71 @@ fn restart_advantage(results: &M1Results) -> Figure {
         subtitle: "Advantage = honest expected time ÷ restarting miner's expected time. With per-round entropy the advantage is exactly 1.".to_string(),
         panels,
         size: (1700, 680),
+    }
+}
+
+fn quorum_tradeoff(results: &M1Results) -> Figure {
+    let kwcs = results.g.quorum.iter().map(|r| r.kwcs).min().unwrap_or(0);
+    let rows: Vec<_> = results
+        .g
+        .quorum
+        .iter()
+        .filter(|r| r.layout == POOL_LAYOUT && r.kwcs == kwcs)
+        .collect();
+    let mut quorums: Vec<(f64, String)> = Vec::new();
+    for r in &rows {
+        if !quorums.iter().any(|(_, q)| *q == r.quorum) {
+            quorums.push((r.quorum_fraction, r.quorum.clone()));
+        }
+    }
+    let colors = ramp(quorums.len());
+    let panel = |title: &str, pick: fn(&gb_analytic::quorum_tradeoff::QuorumRow) -> f64| Panel {
+        title: title.to_string(),
+        x_label: "attacker fraction of registered IDs, p".to_string(),
+        y_label: "probability per KWC (log scale)".to_string(),
+        x_scale: Scale::Linear,
+        y_scale: Scale::Log10,
+        series: quorums
+            .iter()
+            .zip(colors.iter().cycle())
+            .map(|((_, q), color)| {
+                let approvals = rows
+                    .iter()
+                    .find(|r| r.quorum == *q)
+                    .map_or(String::new(), |r| r.approvals.clone());
+                Series {
+                    label: format!("q = {q} ({approvals})"),
+                    points: rows
+                        .iter()
+                        .filter(|r| r.quorum == *q)
+                        .map(|r| (r.attacker_fraction, pick(r)))
+                        .filter(|(_, y)| y.is_finite())
+                        .collect(),
+                    color: *color,
+                    markers: true,
+                }
+            })
+            .collect(),
+        references: Vec::new(),
+        legend: SeriesLabelPosition::LowerRight,
+        y_range: None,
+    };
+    Figure {
+        title: "Quorum trade-off for a 40-member pool".to_string(),
+        subtitle: format!(
+            "Exact hypergeometric at {} KWCs. A lower quorum makes stalling harder but signing alone and conflicting approvals easier.",
+            short_count(kwcs)
+        ),
+        panels: vec![
+            panel("Attacker can stall", |r| r.log10_p_stall),
+            panel("Attacker can sign without honest members", |r| {
+                r.log10_p_sign
+            }),
+            panel("Two conflicting decisions can be approved", |r| {
+                r.log10_p_conflict
+            }),
+        ],
+        size: (1800, 640),
     }
 }
 

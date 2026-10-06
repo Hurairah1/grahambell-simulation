@@ -58,6 +58,30 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "Fixed issuance rate, or the adaptive variant capped by registered IDs.",
     ),
     doc(
+        "issuance.difficulty_variant",
+        "§2, §3.8",
+        "",
+        "Difficulty rule: Variant B (count-based, default) or Variant A (Bitcoin-style, comparison).",
+    ),
+    doc(
+        "issuance.retarget_window_blocks",
+        "§2, §3.8",
+        "PoW-ID blocks",
+        "Variant A comparison: retarget window K.",
+    ),
+    doc(
+        "issuance.retarget_clamp_factor",
+        "§2, §3.8",
+        "factor",
+        "Variant A comparison: largest difficulty change per retarget.",
+    ),
+    doc(
+        "issuance.count_based_correction",
+        "§2, §3.8",
+        "",
+        "Variant B's correction from recent block times; no rule yet (M3 proposes and tests one).",
+    ),
+    doc(
         "issuance.min_attack_time_floor_years",
         "§2, §3.9",
         "years",
@@ -68,6 +92,12 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "§2, §3.9",
         "× T_min",
         "Interval between recalculations of the adaptive cap.",
+    ),
+    doc(
+        "issuance.cap_safety_factor",
+        "§2, §3.9",
+        "fraction",
+        "Safety factor k in the adaptive cap registered_IDs / (k × T_min).",
     ),
     doc(
         "issuance.confirmation_depth_blocks",
@@ -110,6 +140,24 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "§2",
         "",
         "Each WC leads one KWC and is a subordinate in as many as a KWC has subordinates.",
+    ),
+    doc(
+        "witness.ring_offsets",
+        "§2, §4.2",
+        "WCs",
+        "Golomb-ring offsets: KWC w has subordinate WCs (w + offset) mod W.",
+    ),
+    doc(
+        "witness.ring_offsets_30_node",
+        "§2, §4.2",
+        "WCs",
+        "Golomb-ring offsets in the 30-node comparison layout.",
+    ),
+    doc(
+        "witness.allocation_beacon_delay_blocks",
+        "§2, §4.2",
+        "PoW-ID blocks",
+        "Blocks between an ID's confirmation and the block whose hash is its allocation beacon.",
     ),
     doc(
         "witness.watched_registered_per_node",
@@ -229,19 +277,25 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "cac.join_every_n_tx_blocks",
         "§2, §4.3",
         "PoW-Tx blocks",
-        "The miner of every n-th PoW-Tx block joins the committee.",
+        "One new committee member joins for every n-th PoW-Tx block.",
+    ),
+    doc(
+        "cac.seat_selection",
+        "§2, §4.3",
+        "",
+        "How the new member is chosen: lottery over the canonical active list, or the v0.2 rule.",
+    ),
+    doc(
+        "cac.lottery_beacon_offset_blocks",
+        "§2, §4.3",
+        "PoW-Tx blocks",
+        "Lottery beacon offset k: the draw for block B uses the hash of block B + k.",
     ),
     doc(
         "cac.approval_threshold",
         "§2, §4.3",
         "fraction",
         "Approval threshold as a fraction of members, rounded up.",
-    ),
-    doc(
-        "cac.seat_rule",
-        "§2, §4.3",
-        "",
-        "Whether one ID may hold two committee seats at once.",
     ),
     doc("genesis.ids", "§2", "IDs", "Number of genesis IDs G."),
     doc(
@@ -291,10 +345,30 @@ pub const SPEC_SECTION_2_ROWS: &[(&str, &[&str])] = &[
         "PoW-ID target interval",
         &["issuance.pow_id_target_interval_s", "issuance.rate_mode"],
     ),
+    ("Difficulty rule (§3.8)", &["issuance.difficulty_variant"]),
+    (
+        "Variant A comparison settings (§3.8)",
+        &[
+            "issuance.retarget_window_blocks",
+            "issuance.retarget_clamp_factor",
+        ],
+    ),
+    (
+        "Variant B correction from recent block times (§3.8)",
+        &["issuance.count_based_correction"],
+    ),
     ("PoW-Tx interval", &["transactions.pow_tx_interval_s"]),
     ("WC size", &["witness.wc_size"]),
     ("KWC composition", &["witness.subordinate_wcs_per_kwc"]),
     ("Number of KWCs", &["witness.kwc_count_rule"]),
+    (
+        "KWC ring offsets (§4.2)",
+        &["witness.ring_offsets", "witness.ring_offsets_30_node"],
+    ),
+    (
+        "Allocation beacon delay (§4.2)",
+        &["witness.allocation_beacon_delay_blocks"],
+    ),
     (
         "Registered-miner PoWit quorum",
         &[
@@ -347,9 +421,15 @@ pub const SPEC_SECTION_2_ROWS: &[(&str, &[&str])] = &[
         &["admission.peer_bootstrap_count"],
     ),
     ("CAC size", &["cac.size", "cac.membership_policy"]),
-    ("CAC new member", &["cac.join_every_n_tx_blocks"]),
+    (
+        "CAC seat selection (§4.3)",
+        &["cac.seat_selection", "cac.join_every_n_tx_blocks"],
+    ),
+    (
+        "CAC lottery beacon offset k (§4.3)",
+        &["cac.lottery_beacon_offset_blocks"],
+    ),
     ("CAC approval threshold", &["cac.approval_threshold"]),
-    ("CAC seat uniqueness", &["cac.seat_rule"]),
     ("Genesis IDs (G)", &["genesis.ids"]),
     (
         "Genesis distribution",
@@ -382,6 +462,10 @@ pub const SPEC_SECTION_2_ROWS: &[(&str, &[&str])] = &[
     (
         "Adaptive-cap checkpoint interval (§3.9)",
         &["issuance.cap_checkpoint_interval_fraction_of_t_min"],
+    ),
+    (
+        "Adaptive-cap safety factor k (§3.9)",
+        &["issuance.cap_safety_factor"],
     ),
     ("Signature scheme", &["crypto.signature_scheme"]),
     ("Hash function", &["crypto.hash_function"]),
@@ -584,8 +668,12 @@ mod tests {
     fn status_lookup_finds_the_spec_tag() {
         let config = Config::default();
         assert_eq!(
-            status_of(&config, "cac.seat_rule").unwrap(),
+            status_of(&config, "issuance.count_based_correction").unwrap(),
             Some(Status::P)
+        );
+        assert_eq!(
+            status_of(&config, "cac.lottery_beacon_offset_blocks").unwrap(),
+            Some(Status::O)
         );
         assert_eq!(status_of(&config, "no.such.key").unwrap(), None);
     }

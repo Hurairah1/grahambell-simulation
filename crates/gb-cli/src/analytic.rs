@@ -1,5 +1,6 @@
 //! `gb analytic`: runs the M1 analytical baseline and writes every output with its provenance.
 
+use crate::brief::{BRIEF_FILE, render_brief};
 use crate::charts::draw_all;
 use crate::load_config;
 use crate::summary::{Provenance, render};
@@ -44,8 +45,8 @@ pub struct AnalyticOutcome {
 }
 
 /// Computes every table and writes all outputs except `run.json` into `dir`: the resolved
-/// configuration, the CSV tables, the charts and `SUMMARY.md`. Returns the results and the
-/// provenance written into the summary.
+/// configuration, the CSV tables, the charts, `SUMMARY.md` and the public brief. Returns the
+/// results and the provenance written into the summary.
 pub fn produce(
     dir: &Path,
     config: &Config,
@@ -64,6 +65,9 @@ pub fn produce(
     let summary = render(config, &results, &provenance);
     let path = dir.join(SUMMARY_FILE);
     std::fs::write(&path, summary).with_context(|| format!("writing {}", path.display()))?;
+    let brief_path = dir.join(BRIEF_FILE);
+    std::fs::write(&brief_path, render_brief(config, &results))
+        .with_context(|| format!("writing {}", brief_path.display()))?;
     Ok((results, provenance))
 }
 

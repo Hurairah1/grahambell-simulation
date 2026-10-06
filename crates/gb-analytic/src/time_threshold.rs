@@ -46,6 +46,10 @@
 //!   `t = w + (j−1)x + ρ/((1+w)(1+x)^{j−1}) − 1`, which is convex in `w`. Its minimum is at
 //!   `(1+w)² = ρ/(1+x)^{j−1}`, clipped to the range of `w` for which the crossing falls in
 //!   interval `j`.
+//! - **Safety factor `k`** (SPEC §3.9, v0.3): the cap `registered/(k·T_min)` is the same
+//!   problem measured in units of `k·T_min`, with checkpoints every `x/k` of those units. Its
+//!   worst-phase time is therefore `k · t_worst(ρ, x/k)` T_min. With `x = 1` and `k = 7/6`
+//!   this is exactly 1 for a 100%-capture attacker reaching 51%.
 
 use crate::error::{Result, ensure};
 use crate::exact::{Q, decimal, integer, ratio, to_f64};
@@ -284,6 +288,16 @@ pub fn cap_checkpoint_worst_phase(rho: f64, interval: f64) -> WorstPhase {
         )
 }
 
+/// Worst start phase for a cap `registered/(k·T_min)` recalculated every `interval` (both
+/// times in units of `T_min`). See the module documentation.
+pub fn cap_scaled_worst_phase(rho: f64, interval: f64, k: f64) -> WorstPhase {
+    let worst = cap_checkpoint_worst_phase(rho, interval / k);
+    WorstPhase {
+        time: k * worst.time,
+        first_checkpoint: k * worst.first_checkpoint,
+    }
+}
+
 /// Smallest safety factor `k` such that a cap of `registered/(k·T_min)` keeps the worst-phase
 /// time at or above `T_min`. `interval` is the checkpoint interval in units of `T_min`, or
 /// `None` for a continuously updated cap (`k = 1/ln ρ`).
@@ -293,7 +307,7 @@ pub fn cap_safety_factor(rho: f64, interval: Option<f64>) -> f64 {
     };
     // With the cap scaled by k, time units become k·T_min and checkpoints come every
     // interval/k of those units.
-    let scaled_time = |k: f64| k * cap_checkpoint_worst_phase(rho, interval / k).time;
+    let scaled_time = |k: f64| cap_scaled_worst_phase(rho, interval, k).time;
     let (mut low, mut high) = (0.25 / (rho - 1.0).max(1e-9), 4.0 / libm::log(rho));
     for _ in 0..200 {
         let mid = 0.5 * (low + high);
@@ -378,13 +392,21 @@ pub struct GrowthRow {
     pub minimum_share_for_finite_time: f64,
 }
 
+/// A4 model label: checkpoints, worst start phase, with the safety factor for that interval.
+pub const CAP_WITH_SAFETY_FACTOR: &str = "checkpoint worst phase with safety factor k";
+/// A4 model label: the configured cap (SPEC §3.9 defaults: k = 7/6, checkpoints every T_min).
+pub const CAP_CONFIGURED: &str = "configured cap (SPEC §3.9 default)";
+
 /// A4: adaptive cap, time to threshold in units of T_min.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CapRow {
-    /// "frozen", "continuous", "checkpoint aligned" or "checkpoint worst phase".
+    /// "frozen", "continuous", "checkpoint aligned", "checkpoint worst phase",
+    /// [`CAP_WITH_SAFETY_FACTOR`] or [`CAP_CONFIGURED`].
     pub model: &'static str,
     /// Checkpoint interval as a fraction of T_min (checkpoint models only).
     pub checkpoint_interval_fraction_of_t_min: Option<f64>,
+    /// Safety factor k in the cap `registered/(k·T_min)` (1 when absent).
+    pub safety_factor: Option<f64>,
     /// Attacker share s of issuance.
     pub attacker_share: f64,
     /// Threshold T.
@@ -489,6 +511,8 @@ struct Grids {
     t_min: Vec<(f64, Q)>,
     checkpoints: Vec<(f64, Q)>,
     floor: (f64, Q),
+    configured_interval: f64,
+    configured_k: f64,
 }
 
 fn decimals(values: &[f64]) -> Result<Vec<(f64, Q)>> {
@@ -509,7 +533,35 @@ fn grids(config: &Config) -> Result<Grids> {
         t_min: decimals(&grid.t_min_years)?,
         checkpoints: decimals(&grid.checkpoint_fractions_of_t_min)?,
         floor: (grid.floor_threshold, decimal(grid.floor_threshold)?),
+        configured_interval: config
+            .issuance
+            .cap_checkpoint_interval_fraction_of_t_min
+            .value,
+        configured_k: config
+            .issuance
+            .cap_safety_factor
+            .value
+            .to_f64()
+            .ok_or_else(|| {
+                crate::error::AnalyticError::InvalidInput(
+                    "the adaptive-cap safety factor has a zero denominator".to_string(),
+                )
+            })?,
     })
+}
+
+/// Worst-phase time, in units of T_min, of the configured cap for a 100%-capture attacker
+/// reaching the floor threshold, with the start phase that achieves it.
+pub fn configured_cap_floor(config: &Config) -> Result<WorstPhase> {
+    let g = grids(config)?;
+    let rho = crossing_multiple(&Q::one(), &g.floor.1).ok_or_else(|| {
+        crate::error::AnalyticError::InvalidInput("the floor threshold must be below 1".to_string())
+    })?;
+    Ok(cap_scaled_worst_phase(
+        to_f64(&rho),
+        g.configured_interval,
+        g.configured_k,
+    ))
 }
 
 /// Builds every section A table from the configuration.
@@ -617,49 +669,67 @@ fn growth_rows(g: &Grids) -> Vec<GrowthRow> {
 
 fn cap_rows(g: &Grids) -> Vec<CapRow> {
     let mut rows = Vec::new();
+    // Safety factor that holds the floor at the worst phase, for each checkpoint interval.
+    let floor_rho = crossing_multiple(&Q::one(), &g.floor.1).map(|r| to_f64(&r));
+    let factors: Vec<(f64, Option<f64>)> = g
+        .checkpoints
+        .iter()
+        .map(|(f, _)| (*f, floor_rho.map(|r| cap_safety_factor(r, Some(*f)))))
+        .collect();
     for (share_f, share) in &g.shares {
         for (threshold_f, threshold) in &g.thresholds {
             let rho = crossing_multiple(share, threshold);
             let frozen = cap_frozen_time(share, threshold);
-            rows.push(cap_row(
-                "frozen",
-                None,
-                *share_f,
-                *threshold_f,
-                frozen.time(),
-                None,
-            ));
+            let row = |model, fraction, k, time, phase| {
+                cap_row(model, fraction, k, *share_f, *threshold_f, time, phase)
+            };
+            rows.push(row("frozen", None, None, frozen.time(), None));
             let rho_f = rho.as_ref().map(to_f64);
-            rows.push(cap_row(
+            rows.push(row(
                 "continuous",
                 None,
-                *share_f,
-                *threshold_f,
+                None,
                 rho_f.map(cap_continuous_time),
                 None,
             ));
-            for (fraction_f, fraction) in &g.checkpoints {
+            for ((fraction_f, fraction), (_, k)) in g.checkpoints.iter().zip(&factors) {
                 let aligned = rho
                     .as_ref()
                     .map(|r| to_f64(&cap_checkpoint_time_exact(r, fraction, fraction)));
-                rows.push(cap_row(
+                rows.push(row(
                     "checkpoint aligned",
                     Some(*fraction_f),
-                    *share_f,
-                    *threshold_f,
+                    None,
                     aligned,
                     None,
                 ));
                 let worst = rho_f.map(|r| cap_checkpoint_worst_phase(r, *fraction_f));
-                rows.push(cap_row(
+                rows.push(row(
                     "checkpoint worst phase",
                     Some(*fraction_f),
-                    *share_f,
-                    *threshold_f,
+                    None,
                     worst.map(|w| w.time),
                     worst.map(|w| w.first_checkpoint / *fraction_f),
                 ));
+                let Some(k) = *k else { continue };
+                let scaled = rho_f.map(|r| cap_scaled_worst_phase(r, *fraction_f, k));
+                rows.push(row(
+                    CAP_WITH_SAFETY_FACTOR,
+                    Some(*fraction_f),
+                    Some(k),
+                    scaled.map(|w| w.time),
+                    scaled.map(|w| w.first_checkpoint / *fraction_f),
+                ));
             }
+            let configured =
+                rho_f.map(|r| cap_scaled_worst_phase(r, g.configured_interval, g.configured_k));
+            rows.push(row(
+                CAP_CONFIGURED,
+                Some(g.configured_interval),
+                Some(g.configured_k),
+                configured.map(|w| w.time),
+                configured.map(|w| w.first_checkpoint / g.configured_interval),
+            ));
         }
     }
     rows
@@ -668,6 +738,7 @@ fn cap_rows(g: &Grids) -> Vec<CapRow> {
 fn cap_row(
     model: &'static str,
     fraction: Option<f64>,
+    safety_factor: Option<f64>,
     share: f64,
     threshold: f64,
     time: Option<f64>,
@@ -676,6 +747,7 @@ fn cap_row(
     CapRow {
         model,
         checkpoint_interval_fraction_of_t_min: fraction,
+        safety_factor,
         attacker_share: share,
         threshold,
         outcome: if time.is_some() {
@@ -802,6 +874,7 @@ pub fn checks(config: &Config) -> Result<Vec<Check>> {
     checks.push(substitution_check(&g));
     checks.extend(issuance_monte_carlo_checks(config)?);
     checks.extend(cap_checks(&g));
+    checks.extend(configured_cap_checks(config, &g)?);
     checks.extend(long_run_checks(&g));
     Ok(checks)
 }
@@ -1036,6 +1109,37 @@ fn cap_checks(g: &Grids) -> Vec<Check> {
     checks
 }
 
+fn configured_cap_checks(config: &Config, g: &Grids) -> Result<Vec<Check>> {
+    let worst = configured_cap_floor(config)?;
+    let rho = to_f64(&(Q::one() / (Q::one() - &g.floor.1)));
+    let (x, k) = (g.configured_interval, g.configured_k);
+    let grid_min = (1..=20_000)
+        .map(|i| k * cap_checkpoint_time(rho, x / k, (x / k) * f64::from(i) / 20_000.0))
+        .fold(f64::INFINITY, f64::min);
+    Ok(vec![
+        Check::at_least(
+            "A",
+            "A-cap-configured-floor",
+            &format!(
+                "configured cap (k = {k:.6}, checkpoints every {x} T_min), s=1, T={}: worst-start time is at least T_min (SPEC §3.9 guarantee)",
+                g.floor.0
+            ),
+            1.0,
+            worst.time,
+            1e-9,
+            0,
+        ),
+        Check::absolute(
+            "A",
+            "A-cap-configured-vs-grid",
+            "configured cap: analytic worst start vs dense grid of 20,000 start phases",
+            grid_min,
+            worst.time,
+            1e-6,
+        ),
+    ])
+}
+
 fn long_run_checks(g: &Grids) -> Vec<Check> {
     let mut disagreements = 0;
     let mut far_failures = 0;
@@ -1225,6 +1329,49 @@ mod tests {
         let scaled = |k: f64| k * cap_checkpoint_worst_phase(rho, 0.5 / k).time;
         let values: Vec<f64> = (80..=160).map(|i| scaled(f64::from(i) / 100.0)).collect();
         assert!(values.windows(2).all(|w| w[1] >= w[0]));
+    }
+
+    #[test]
+    fn spec_default_safety_factor_restores_the_floor_exactly() {
+        // k = 7/6 with checkpoints every T_min: 7/6 × 6/7 = 1 (module documentation).
+        let worst = cap_scaled_worst_phase(100.0 / 49.0, 1.0, 7.0 / 6.0);
+        assert!((worst.time - 1.0).abs() < 1e-12, "{}", worst.time);
+        let floor = configured_cap_floor(&Config::default()).unwrap();
+        assert!((floor.time - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_larger_safety_factor_only_lengthens_the_worst_time() {
+        let rho = 100.0 / 49.0;
+        let at = |k| cap_scaled_worst_phase(rho, 1.0, k).time;
+        assert!(at(1.0) < at(7.0 / 6.0) && at(7.0 / 6.0) < at(1.5));
+        assert!((at(1.0) - 6.0 / 7.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cap_table_has_safety_factor_and_configured_rows() {
+        let config = Config::default();
+        let a = section_a(&config).unwrap();
+        let floor_rows: Vec<_> = a
+            .cap
+            .iter()
+            .filter(|r| r.attacker_share == 1.0 && r.threshold == 0.51)
+            .collect();
+        let configured = floor_rows
+            .iter()
+            .find(|r| r.model == CAP_CONFIGURED)
+            .unwrap();
+        assert!((configured.time_in_t_min.unwrap() - 1.0).abs() < 1e-12);
+        let with_k: Vec<_> = floor_rows
+            .iter()
+            .filter(|r| r.model == CAP_WITH_SAFETY_FACTOR)
+            .collect();
+        assert_eq!(with_k.len(), 3);
+        assert!(
+            with_k
+                .iter()
+                .all(|r| (r.time_in_t_min.unwrap() - 1.0).abs() < 1e-8)
+        );
     }
 
     #[test]

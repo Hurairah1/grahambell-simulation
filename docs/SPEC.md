@@ -1,6 +1,6 @@
 # GrahamBell — Stage 1 Simulation Specification
 
-**Version:** 0.2 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, see the Changelog at the end)
+**Version:** 0.3 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05 and 2026-10-06, see the Changelog at the end)
 **Owner:** Hurairah Shamsi, Protocol Architect
 **Purpose of this file:** single source of truth for building and running the Stage 1 simulation. Where this file and older papers disagree, **this file wins**. Where this file is silent or ambiguous, the implementer must **stop and ask**, not guess.
 
@@ -28,7 +28,7 @@ The deliverable is not "the model works." It is a **reproducible map** of the co
 
 ### In scope
 
-Unregistered-to-registered identity issuance (PoW-ID); the witness layer as it affects issuance; the Chain Allocation Committee; a minimal transaction-layer model only where needed (witness seats come from IDs; committee seats come from transaction-block winners; active-ID share).
+Unregistered-to-registered identity issuance (PoW-ID); the witness layer as it affects issuance; the Chain Allocation Committee; a minimal transaction-layer model only where needed (witness seats come from IDs; committee seats come from a lottery over active IDs, §4.3; active-ID share).
 
 ### Out of scope for Stage 1
 
@@ -64,14 +64,19 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 |---|---|---|---|
 | Hash pacing | 1 hash/s per admitted /64 (unregistered) or per ID (registered) | — | D |
 | PoW-ID target interval | 30 s (≈1.05M IDs/yr) | adaptive variant (§3.9) | D / P |
+| Difficulty rule (§3.8) | Variant B: count-based, from the exact admitted online count | Variant A (Bitcoin-style retarget), for comparison | D |
+| Variant A comparison settings (§3.8) | window K = 144 blocks, 4× clamp per retarget | — | D |
+| Variant B correction from recent block times (§3.8) | — | to be proposed and tested in M3 | P |
 | PoW-Tx interval | 10 s | 1–10 s | O |
 | WC size | 10 | 10 | D |
 | KWC composition | 1 leader + 3 subordinate WCs (40 nodes) | 1 + 2 (30 nodes) for comparison | D |
 | Number of KWCs | equals number of WCs (each WC leads exactly one KWC, subordinate in exactly three) | — | D |
+| KWC ring offsets (§4.2) | 1, 4, 6 | 1, 3 for the 30-node comparison | D |
+| Allocation beacon delay (§4.2) | 6 blocks after the ID's confirmation | 3, 6, 12 | O |
 | Registered-miner PoWit quorum | ≥7 of 10 leader WC **and** ≥21 of 30 subordinates (28 total) | 30-node comparison: ≥7 of 10 leader **and** ≥14 of 20 subordinates (21 total) | D |
 | Unregistered-miner PoWit quorum | any ≥27 of 40 | 30-node comparison: any ≥20 of 30 | D |
 | Entropy signatures | **every online member** of the KWC (online must be ≥ quorum) | — | D |
-| Miner capacity per leader WC | 200 registered + 50 unregistered | registered/unregistered split: 200/50, 100/150, 15/235 | D default, O split |
+| Miner capacity per leader WC | 200 registered + 50 unregistered ² | registered/unregistered split: 200/50, 100/150, 15/235 | D default, O split |
 | Miners watched per witness node | 1,000 (800 registered + 200 unregistered) | — | D |
 | Spare witnessing capacity target | +33% over demand | — | D |
 | Per-node request rate limit | 1,000 req/s | — | D |
@@ -80,10 +85,10 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | Convergence interval (admission) | 1 epoch | 0.5–3 epochs | O |
 | Peer bootstrap count (newcomers) | 8 | 4–8 | D |
 | CAC size | 600, first-in first-out | 100–1,000 for comparison | D |
-| CAC new member | miner of every 10th PoW-Tx block | — | D |
+| CAC seat selection (§4.3) | lottery over the canonical active list, one new member per 10th PoW-Tx block | old rule (miner of every 10th PoW-Tx block), for comparison | D |
+| CAC lottery beacon offset k (§4.3) | 3 blocks | 1, 3, 6, 12 | O |
 | CAC approval threshold | at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600) | — | D |
-| CAC seat uniqueness | one seat per ID at a time (§4.3) | duplicates allowed, for comparison | P |
-| Genesis IDs (G) | 2,100,000 ¹ | 0.5M, 1M, 2M, 2.1M, 3M | D |
+| Genesis IDs (G) | 2,900,000 ¹ | 1M, 2.1M, 2.9M, 5M, 10M | D |
 | Genesis distribution | KYC, one per verified person | fraction secretly controlled by one party: 0–20% | D / O |
 | Confirmation depth for new IDs | 6 PoW-ID blocks | 3–12 | O |
 | Clock tolerance δ | 2 s | 0.5–10 s | O |
@@ -91,11 +96,14 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | Re-activation wait after return | — | 1 d, 7 d, 14 d, 30 d | O |
 | Penalty ladder (lesser offences) | 24 h, then 30 days, then permanent | — | D |
 | Minimum attack time floor (adaptive issuance) | 2 years | 1–10 years | P |
-| Adaptive-cap checkpoint interval (§3.9) | — | T_min/4, T_min/2, T_min | O |
+| Adaptive-cap checkpoint interval (§3.9) | T_min | T_min/4, T_min/2, T_min | D |
+| Adaptive-cap safety factor k (§3.9) | 7/6, for checkpoints every T_min | k for the other intervals is reported by M1 | D |
 | Signature scheme | BLS12-381 aggregate signatures with signer bitfield and proof of possession | — | D |
 | Hash function | SHA-256 | — | P |
 
-¹ With a 30 s rate (R ≈ 1,051,200 IDs per year), a 100%-capture attacker needs about 2.02M active IDs in the existing base before reaching 51% takes 2 years ((0.51/0.49) × H_active / R = 2 years). 2.1M adds a margin (about 2.08 years). The floor depends on genesis IDs staying **active**: it holds only while at least about 96% of 2.1M genesis IDs remain active.
+¹ With a 30 s rate (R ≈ 1,051,200 IDs per year), a 100%-capture attacker needs about 2.02M active IDs in the existing base before reaching 51% takes 2 years ((0.51/0.49) × H_active / R = 2 years). The floor depends on genesis IDs staying **active**. With 2.9M genesis IDs it holds while at least 69.7% of them remain active, that is with up to 30.3% inactive. At full activity the time is about 2.87 years.
+
+² Each registered ID sits in exactly one WC and mines at most one channel, so a KWC averages at most 10 registered miners. The registered capacity of 200 per leader WC (and 800 registered miners watched per node) cannot be reached network-wide; it is reached only where miners concentrate. The registered/unregistered split stays a sweep.
 
 ---
 
@@ -162,22 +170,33 @@ Validators check: quorum signatures with bitfield and proof of possession; full 
 
 **Same-height tie-break [P]:** if two valid PoW-ID blocks arrive for the same height, keep the one with the lower block hash. The rule is deterministic, so network latency cannot influence it. Compare against first-seen in M3.
 
-### 3.8 Difficulty [P compare]
+The confirmation depth stays as in §2. M1 finds that same-step ties end about 1.66% of rounds at the 30 s target; M3 measures the resulting fork and orphan rate under both tie-break rules.
 
-- **Variant A (default): Bitcoin-style retarget** from recent block times over a window.
-- **Variant B: count-based.** Per-hash success probability `p = 1 / (admitted online unregistered miners × target interval)`, with a small correction from recent block times.
+### 3.8 Difficulty [D; P correction]
+
+- **Variant B (default): count-based.** Per-hash success probability `p = 1 / (admitted online unregistered miners × target interval)`, computed from the exact admitted online count, which admission (§3.1) already tracks.
+- **[P] Variant B correction:** a small correction from recent block times. It is to be proposed and tested in M3; until then Variant B uses the count alone.
+- **Variant A (comparison): Bitcoin-style retarget** from recent block times over a window of K = 144 PoW-ID blocks, each retarget clamped to a factor of 4 in either direction.
 
 ### 3.9 Issuance rate [D default, P variant]
 
 - **Default:** fixed target, one PoW-ID block per 30 s.
-- **Adaptive variant:** rate may rise with demand, but is capped at `R ≤ registered_IDs / T_min`, so the minimum time for a 100%-capture attacker to reach majority never falls below `T_min`.
-- The cap counts **registered** IDs, not active IDs, because an attacker can inflate the active count by coming online. It is recalculated only at **fixed checkpoints**. The checkpoint interval is a parameter **[O]** (§2).
+- **Adaptive variant (optional):** the rate may rise with demand, but is capped at `R ≤ registered_IDs / (k × T_min)`, where `k` is a safety factor.
+- The cap counts **registered** IDs, not active IDs, because an attacker can inflate the active count by coming online. It is recalculated only at **fixed checkpoints**, every `T_min` by default (§2).
+- With checkpoints every `T_min`, `k = 7/6`. M1 reports `k` for the other checkpoint intervals in the §2 sweep.
+- **Guarantee:** With the safety factor k for the chosen checkpoint interval, a 100%-capture attacker cannot reach 51% in less than T_min, at any start phase.
+- **Why `k` is needed:** an attacker that chooses when to start relative to the public checkpoint schedule reaches majority sooner than `T_min` under the cap without `k` (M1: 0.857 `T_min` for checkpoints every `T_min`).
 - The cap may set the rate **below** the fixed 30 s target. That is its purpose.
-- **Note (from the M1 analysis):** with checkpoints, an attacker that chooses when to start relative to the checkpoint schedule can reach majority sooner than `T_min`. Holding the floor at the worst start phase needs a safety factor `k` in the cap, `R ≤ registered_IDs / (k × T_min)`. For a checkpoint interval of `T_min`, `k = 7/6`. M1 reports `k` for the other intervals.
 
 ### 3.10 After winning
 
 The winning miner is treated as offline once its PoW-ID block passes confirmation depth, freeing its slot. A new ID may mine transactions before it is allocated to a WC.
+
+### 3.11 Registration index and canonical active list [D]
+
+- **Registration index.** Every registered ID has one. Genesis IDs are numbered first, in their published order; each new ID then takes the next index, in PoW-ID confirmation order.
+- **Canonical active list.** All registered IDs in index order, excluding banned and deactivated IDs.
+- Every node builds both from chain data alone. Allocation (§4.2) and the committee lottery (§4.3) use them.
 
 ---
 
@@ -189,16 +208,54 @@ Every registered ID is a witness node in exactly one WC, permanently on duty. A 
 
 ### 4.2 Allocation [D]
 
-- **Deterministic and publicly recomputable:** `chain(ID) = f(SHA256(ID ‖ beacon))`, where `beacon` is the hash of a block a fixed number of blocks after the ID's confirmation, so not even the ID's owner knows its placement when minting.
-- The CAC records and attests the result; it cannot choose it, and rejecting a block cannot produce a different shuffle.
-- Constraint: **no mutual monitoring pairs** (two WCs must not monitor each other in different KWCs).
-- **[P, optional test]** diversity constraints within a KWC (for example, no two members from the same /48 or the same network operator).
+Allocation is deterministic and publicly recomputable from chain data. Not even an ID's owner knows its placement when minting. The rationale is in `docs/ARCHITECTURE.md` §8.
+
+**Beacon.** The beacon for an ID is the hash of the PoW-ID block a fixed delay after the ID's confirmation: 6 blocks by default, equal to the confirmation depth (§2). Genesis IDs are allocated first, in registration-index order, using a public launch seed in place of a beacon.
+
+**Seats: inside-out Fisher–Yates insertion.**
+
+1. Seats are numbered 0, 1, 2, …; WC `w` is seats `10w` to `10w + 9`.
+2. IDs are inserted in registration-index order (§3.11). When an ID is inserted while `n` seats are filled (seats 0 to `n − 1`), compute `j = SHA256("GB/alloc" ‖ ID ‖ beacon) mod (n + 1)`, reading the hash as a 256-bit integer.
+   - If `j = n`, the ID takes seat `n`.
+   - Otherwise the ID in seat `j` moves to seat `n`, and the new ID takes seat `j`.
+3. A WC is **active** when all 10 of its seats are filled, so the number of active WCs is `W = ⌊filled seats / 10⌋`. The partial tail WC is **pending**: its members may mine (§3.10) but do not witness until it fills.
+4. **Removal** (ban or deactivation, §4.6–§4.7): the ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring is recomputed.
+5. **Re-activation** re-inserts the ID by step 2. Which block supplies the beacon for a re-insertion is open (§12).
+
+**KWCs: a Golomb-ruler ring.** KWC `w` has leader WC `w` and subordinate WCs `(w + 1)`, `(w + 4)` and `(w + 6)`, all mod `W`. The 30-node comparison uses `(w + 1)` and `(w + 3)`.
+
+- Each WC leads exactly one KWC and is a subordinate in exactly three.
+- There are **no mutual monitoring pairs** (two WCs must not monitor each other in different KWCs), and any two KWCs share at most one WC.
+- These properties need `W ≥ 13` (`W ≥ 7` for the comparison), which holds from genesis.
+
+**Consequences.**
+
+- Each new ID changes the membership of one existing WC and moves one existing ID into the pending tail WC. Chain membership is therefore not fixed. In exchange, every WC's composition tracks the attacker's share of the population, not its share of recent issuance.
+- This replaces the per-ID formula `chain(ID) = f(SHA256(ID ‖ beacon))` and the older rule that a vacancy is filled by a newly registered ID.
+
+**Role of the CAC.** The Allocation Committee publishes the placement in its block. Every node recomputes it and rejects a mismatch. The committee announces the placement but cannot choose it, and rejecting a block cannot produce a different placement.
+
+**[P, optional test]** Diversity constraints within a KWC (for example, no two members from the same /48 or the same network operator).
 
 ### 4.3 Chain Allocation Committee [D]
 
-600 members, first in, first out; the miner of every 10th PoW-Tx block joins. 66% approval for an Allocation Committee Block, meaning at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600). Leader rotates. A leader that gets two conflicting blocks approved has both rejected.
+600 members, first in, first out. 66% approval for an Allocation Committee Block, meaning at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600). Leader rotates. A leader that gets two conflicting blocks approved has both rejected.
 
-**Seat uniqueness [P]:** one ID cannot hold two CAC seats at once. If the miner of a 10th PoW-Tx block is already a member, the seat goes to the next 10th-block miner who is not.
+**Seat lottery [D].** For every 10th PoW-Tx block B, the new CAC member is the ID at position SHA256("GB/cac" || hash of block B+k) mod N_active in the canonical active list, where N_active is the length of that list. If that ID is already a member, take the next position, wrapping around, until a non-member is found. The oldest member leaves (first in, first out, unchanged). k = 3 [O] (using a later block limits the influence of whoever mines block B). Every node computes the committee from chain data; nothing extra is broadcast.
+
+- **Timing.** The new member is drawn before the oldest member leaves, so the oldest member counts as a member during the draw. The canonical active list (§3.11) is read as of block B, so it is fixed before beacon block B+k exists.
+- **Modulo bias.** Hashes are 256-bit, so each position's probability differs from 1/N_active by a relative amount below N_active / 2²⁵⁶. That is below 10⁻⁶⁸ at 10⁹ IDs, and negligible far beyond.
+- **Result.** An attacker's expected share of committee seats equals its share of active IDs. Mining power plays no part.
+
+**Duties of the leader's block.**
+
+- The placement of new and re-activated IDs (§4.2).
+- Committee joins and leaves, which every node can recompute from the lottery.
+- Bans already approved by KWCs, compiled into Master Blacklisting Blocks, one for registered and one for unregistered miners.
+
+**Stalling.** An attacker holding enough seats can stall Allocation Committee Blocks. This is accepted for now, because allocation is deterministic: a stalled committee delays the announcement but cannot change any placement. M4 tests the impact.
+
+**Comparison rule (v0.2).** The miner of every 10th PoW-Tx block joins; if it is already a member, the seat goes to the next 10th-block miner who is not. It is kept only as a labelled comparison in M1.
 
 ### 4.4 Proposers [D]
 
@@ -211,12 +268,22 @@ If an online member's signature is missing from a miner's aggregate, every other
 ### 4.6 Ban principle [D]
 
 - **Network-level bans require verifiable evidence** (for example, two conflicting signed statements, a signed false statement, or documented refusal through One Chance).
+- **Bans are only for proven misbehaviour.** Being offline is not misbehaviour: offline beyond the allowance leads to deactivation (§4.7), never a ban.
 - **Miner complaints may trigger a check but never decide a ban.** Witnesses vote (66% of the KWC, meaning at least two-thirds rounded up: 27 of 40) only on behaviour they observed themselves after One Chance.
+- **Voting pool.** The full 40-member KWC votes on bans, MOBu/MOBr and offline requests. The subordinate-only proposer (§4.4) only proposes.
 - **[P] Unreachable is not refusal.** A member that cannot be reached is treated as offline under the allowance; a ban requires proof it refused while demonstrably online. Implement both this rule and the strict alternative (ban on failed One Chance) for comparison.
 
 ### 4.7 Offline handling [D rules, O values]
 
-Grace epoch; self-service offline requests; forced signing via One Chance for members that withhold while online. Long absence: **deactivation (not destruction)**, with a **re-activation wait** on return. Both durations are swept.
+Grace epoch; self-service offline requests; forced signing via One Chance for members that withhold while online.
+
+**Offline beyond the allowance leads to deactivation, never a ban.**
+
+- A deactivated ID stops counting as active and leaves the canonical active list (§3.11).
+- It vacates its WC seat by the removal step of §4.2.
+- On return it waits the **re-activation wait**, then is re-inserted into a seat by §4.2 and counts again.
+- Both durations (deactivation threshold, re-activation wait) are [O] and swept (§2).
+- Each deactivation and re-activation changes KWC compositions (§10 H6), so household downtime affects witness-capture odds.
 
 ### 4.8 Penalties [D]
 
@@ -252,7 +319,7 @@ The adversary cannot: break SHA-256, BLS12-381 or VRF security; forge signatures
 - **S2** Well-funded datacenter attacker; attacker share 5–60%; honest growth and churn swept.
 - **S3** Patient accumulator over multi-year horizons.
 - **S4** Botnet / residential proxies: free nodes with high churn (100k, 500k, 1M devices).
-- **S5** Restart attack: fixed-for-duration entropy (old design) versus per-round entropy (current).
+- **S5** Restart attack: fixed-for-duration entropy (old design) versus per-round entropy (current). Realistic restart cost C = grace epoch + convergence interval + post-admission wait (450 s at the §2 defaults).
 - **S6** Difficulty hopping: Variant A versus Variant B.
 - **S7** Adaptive issuance manipulation, with and without the `T_min` cap.
 - **S8** Unregistered-slot exhaustion and honest demand surges.
@@ -262,7 +329,7 @@ The adversary cannot: break SHA-256, BLS12-381 or VRF security; forge signatures
 **B. Entropy and pacing integrity**
 
 - **S11** Grinding: (a) old flow with miner signing last using non-unique signatures; (b) subset selection; (c) colluding last witness; (d) header equivocation; (e) current BLS all-online-members flow. Expected: advantage in (a)–(c), detection in (d), none in (e).
-- **S12** Early signing: fraction of KWCs that could sign early versus attacker share; detection via timestamp checks; clock skew sweep.
+- **S12** Early signing: fraction of KWCs capable of signing without honest members versus attacker share; detection via timestamp checks (§3.7); clock skew sweep.
 - **S13** Targeted delay of entropy: start rule (a) versus (b).
 - **S14** Sorted-hash collision test (separate unit test).
 
@@ -274,7 +341,7 @@ The adversary cannot: break SHA-256, BLS12-381 or VRF security; forge signatures
 - **S18** Stalling proposers trapping honest miners as "online"; self-service recovery time.
 - **S19** Lazy onboarding by chains; effect of the subordinate-only proposer.
 - **S20** Lazy subordinates that sign without recomputing.
-- **S21** CAC capture and stalling over multi-year runs.
+- **S21** CAC capture and stalling over multi-year runs, under the seat lottery (§4.3), with the v0.2 rule as a comparison. Primary measures: exact entries into each state per year, and the share of time spent in it. The M1 brief's independent-composition estimate is reported only as a labelled comparison.
 - **S22** Correlated operators: a deliberately "ugly" operator graph (shared cloud regions, one hidden owner of many IDs).
 - **S23** Regional partition plus provider outage plus miner stampede at peak demand; client reroute backoff policy.
 - **S24** Eclipsed newcomers, with a varying fraction of poisoned peer-discovery sources.
@@ -316,9 +383,11 @@ Thresholds below are proposals. **The architect confirms them before results are
 - **H3 No grinding.** Under S11(e), no strategy reduces the expected winning step relative to an honest miner beyond statistical noise.
 - **H4 No restart advantage.** Under per-round entropy (S5 current), the restart strategy's advantage factor is ≤ 1.05.
 - **H5 Hopping.** Under Variant B, the hopping gain is ≤ 2%; report Variant A's gain.
-- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of KWCs capable of early signing over 10 years at 100,000 KWCs is < 1. Stall fractions are reported without a threshold.
-  - *Refresh model:* every KWC composition ever formed counts as an independent draw. New KWCs form as new IDs are allocated (about R/10 new WCs per year), plus replacements after bans.
-  - Report for both the registered quorum and the unregistered quorum. PoW-ID uses the unregistered quorum.
+- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of KWCs capable of signing without honest members over 10 years at 100,000 KWCs is < 1. Stall fractions are reported without a threshold.
+  - *Meaning:* the attacker's seats alone meet the quorum. Such a KWC still cannot make an early-signed block valid beyond δ, because §3.7 rejects a block received before its own timestamp. Its powers are stalling and censoring miners in that KWC; entropy grinding needs every seat.
+  - *Refresh model:* every KWC composition ever formed counts as an independent draw. Under the §4.2 allocation, compositions form when an ID is inserted (a new or re-activated ID: about 4.7 compositions each) and when an ID is removed (a ban or deactivation: about 4.6 each). The v0.2 count (about R/10 new KWCs per year, plus 4 per ban replacement) is reported as a comparison.
+  - *Ban rate:* 0 per year in the base case; 1% and 5% of registered IDs per year as labelled sensitivities.
+  - Report for both quorums: the unregistered quorum governs PoW-ID, the registered quorum governs PoW-Tx.
 - **H7 Honest attrition.** Under a realistic household downtime profile, IDs lost per year without misbehaviour ≤ 1% for the chosen offline parameters.
 - **H8 Griefing.** Under the §4.6 [P] rule, griefing bans of honest witnesses are impossible; report the cost per victim under the strict rule.
 - **H9 Cost.** Report the money required for an attacker to hold 33% and 51% of active IDs for one year at several honest network sizes (no threshold; reported).
@@ -351,9 +420,57 @@ Thresholds below are proposals. **The architect confirms them before results are
 - Key compromise and revocation (for example, a pre-registered backup key): post-Stage 1.
 - Diversity constraints in allocation.
 - Witness Chain decentralization trigger for Stage 4 (published criteria).
+- Which block supplies the beacon when a re-activated ID is re-inserted (§4.2).
+- Whether a CAC member that is deactivated or banned keeps its committee seat until first-in first-out removes it (§4.3).
+- The Variant B correction from recent block times (§3.8), to be proposed and tested in M3.
+- How often a household ID is deactivated and re-activated per year (§4.7); M3 household downtime profiles supply it.
+
 ---
 
 ## Changelog
+
+### v0.3 — 2026-10-06
+
+Decisions by the protocol architect, recorded after reviewing the M1 results.
+
+- **§2 Genesis IDs (G).**
+  - Default changed from 2,100,000 to 2,900,000 [D]. Sweep changed to 1M, 2.1M, 2.9M, 5M, 10M.
+  - Reason: M1 showed that with 2.1M genesis IDs the 2-year floor holds only while at least 96.2% of them stay active. With 2.9M it holds with up to 30.3% of genesis IDs inactive (footnote ¹).
+- **§2 and §3.9 adaptive cap.**
+  - The cap is now `registered_IDs / (k × T_min)`. The checkpoint interval defaults to `T_min` [D], with `k = 7/6` [D].
+  - The guarantee sentence now reads: "With the safety factor k for the chosen checkpoint interval, a 100%-capture attacker cannot reach 51% in less than T_min, at any start phase."
+  - The adaptive cap remains an optional variant; the fixed 30 s rate remains the default.
+  - Reason: M1 showed that without `k` an attacker choosing its start phase reaches 51% in 0.857 `T_min` (checkpoints every `T_min`), and that `k = 7/6` restores the floor exactly.
+- **§2 and §3.8 difficulty.**
+  - Variant B (count-based, from the exact admitted online count) becomes the default [D]. Variant A (Bitcoin-style, K = 144, 4× clamp) is the comparison [D]. Variant B's small correction is [P], to be proposed and tested in M3.
+  - Reason: M1 found that an attacker hopping in for one Variant A window earns (1 + m) times the fair rate per miner-second, while Variant B, which follows the exact admitted count rather than recent block times, gives no first-order gain.
+- **§3.7.** The lower-hash tie-break stays [P] and the confirmation depth is unchanged. M3 measures the orphan rate. Reason: M1 found same-step ties end about 1.66% of rounds at 30 s.
+- **§3.11 (new).** Registration index and canonical active list [D]. Reason: allocation and the committee lottery need an order every node can rebuild from chain data.
+- **§4.2 allocation.**
+  - The allocation algorithm proposed in `docs/ARCHITECTURE.md` §8 becomes the rule [D], numbered by the §3.11 index. It uses inside-out Fisher–Yates insertion, the Golomb ring {1, 4, 6} and swap-with-last removal.
+  - The CAC publishes the placement; every node recomputes it and rejects a mismatch.
+  - It replaces the per-ID formula `chain(ID) = f(SHA256(ID ‖ beacon))` and the older rule that a vacancy is filled by a newly registered ID.
+  - New §2 rows: ring offsets [D]; allocation beacon delay of 6 blocks [O], sweep 3, 6, 12.
+  - Deactivation vacates a seat by the removal step, and re-activation re-inserts by Fisher–Yates.
+  - Reason: a per-ID hash cannot keep every WC at exactly 10 members. Append-only filling would make new WCs mirror the attacker's share of recent issuance rather than of the population.
+- **§4.3 committee.**
+  - The seat lottery over the canonical active list [D] replaces "the miner of every 10th PoW-Tx block joins" and the v0.2 seat-uniqueness rule [P]. The lottery's next-position rule keeps one seat per ID. Beacon offset k = 3 [O], sweep 1, 3, 6, 12.
+  - The new member is drawn before the oldest leaves, from the list as of block B.
+  - Added a note that 256-bit hashes make the modulo bias negligible, and a list of the leader block's duties.
+  - Stalling is accepted for now because allocation is deterministic; M4 tests the impact.
+  - Reason: the attacker's committee share now equals its share of active IDs, independent of mining power, and the committee can announce placements but not choose them.
+- **§4.6–§4.7.** Offline beyond the allowance leads to deactivation, never a ban. Bans are only for proven misbehaviour, and the full 40-member KWC votes on bans, MOBu/MOBr and offline requests. Durations stay [O] and swept. Reason: honest household downtime must not cost an ID.
+- **§2 capacity.** Footnote ² notes that 200 registered miners per leader WC cannot be reached network-wide. The split stays a sweep. Reason: each ID mines at most one channel, so a KWC averages at most 10 registered miners.
+- **§8.**
+  - S5 now defines the realistic restart cost C = grace epoch + convergence interval + post-admission wait (450 s). Reason: needed for the restart analysis.
+  - S12 and S21 updated to the new wording and measures.
+- **§10 H6.**
+  - "Capable of early signing" is renamed "capable of signing without honest members", keeping the §3.7 explanation.
+  - Results are reported for both quorums: unregistered for PoW-ID, registered for PoW-Tx.
+  - The ban rate is 0 per year in the base case, with 1% and 5% as sensitivities.
+  - Compositions are counted under the §4.2 allocation, including deactivation, with the v0.2 count as a comparison.
+  - Reason: §3.7 already rejects early-signed blocks beyond δ, and the adopted allocation changes how compositions form.
+- **§0 scope** updated for the committee lottery, and **§12** gained four open questions.
 
 ### v0.2 — 2026-10-05
 

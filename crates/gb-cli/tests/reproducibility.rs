@@ -1,12 +1,14 @@
 //! End-to-end checks of `gb analytic`: identical inputs give byte-identical outputs, every
-//! expected file is written, every cross-check passes, and a run refuses to start from a
-//! working tree that is not a clean commit.
+//! expected file is written, every cross-check passes, the committed public brief matches a
+//! fresh run, and a run refuses to start from a working tree that is not a clean commit.
 
 use gb_cli::analytic::{AnalyticOptions, SUMMARY_FILE, produce, run_analytic};
+use gb_cli::brief::BRIEF_FILE;
 use gb_cli::charts::CHART_FILES;
 use gb_cli::tables::TABLE_FILES;
 use gb_config::Config;
 use gb_runlog::{GitInfo, RESOLVED_CONFIG_FILE, build_manifest};
+use std::path::PathBuf;
 
 /// Default configuration with smaller Monte Carlo samples, so the test runs quickly.
 fn test_config() -> Config {
@@ -53,10 +55,21 @@ fn identical_inputs_produce_byte_identical_outputs_and_all_checks_pass() {
         );
     }
     assert!(written.contains(&SUMMARY_FILE.to_string()));
+    assert!(written.contains(&BRIEF_FILE.to_string()));
     assert!(written.contains(&RESOLVED_CONFIG_FILE.to_string()));
 
     let failed: Vec<_> = results.checks.iter().filter(|c| !c.passed).collect();
     assert!(failed.is_empty(), "failed checks: {failed:#?}");
+
+    // The brief uses exact tables only, so the reduced Monte Carlo sample sizes of this test
+    // cannot change it: the committed copy must equal the freshly generated one.
+    let committed = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/M1_PUBLIC_BRIEF.md");
+    let generated = std::fs::read_to_string(first.path().join(BRIEF_FILE)).unwrap();
+    let on_disk = std::fs::read_to_string(&committed).unwrap_or_default();
+    assert!(
+        on_disk == generated,
+        "docs/M1_PUBLIC_BRIEF.md differs from the generated brief; copy {BRIEF_FILE} from a run directory"
+    );
 }
 
 #[test]

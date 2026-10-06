@@ -46,28 +46,53 @@ pub enum CacMembershipPolicy {
     FirstInFirstOut,
 }
 
-/// Whether one ID may hold more than one CAC seat at a time (SPEC §4.3).
+/// How a new Chain Allocation Committee member is chosen (SPEC §4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum CacSeatRule {
-    /// Proposed rule (status P): a member's 10th-block win passes to the next 10th-block miner who is not a member.
+pub enum CacSeatSelection {
+    /// Decided rule: for every 10th PoW-Tx block, a lottery over the canonical active list
+    /// (SPEC §3.11); a draw that lands on a member moves to the next position.
     #[default]
-    NextNonMember,
-    /// Comparison: the 10th-block miner joins even if already a member.
-    AllowDuplicates,
+    Lottery,
+    /// Comparison (the v0.2 rule): the miner of every 10th PoW-Tx block joins; a member's win
+    /// passes to the next 10th-block miner who is not a member.
+    TenthBlockMiner,
 }
 
-/// Approval threshold as a fraction of members, rounded up (SPEC §4.3, §4.6).
+/// PoW-ID difficulty rule (SPEC §3.8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DifficultyVariant {
+    /// Variant B (default): count-based, from the exact admitted online count.
+    #[default]
+    CountBased,
+    /// Variant A (comparison): Bitcoin-style retarget from recent block times.
+    BitcoinRetarget,
+}
+
+/// A fraction `numerator / denominator`.
+///
+/// Used for approval thresholds (SPEC §4.3, §4.6), the adaptive-cap safety factor k
+/// (SPEC §3.9) and the quorum fractions of the section G trade-off analysis. Keeping the two
+/// integers, rather than a float, makes "two-thirds rounded up" exact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ApprovalThreshold {
-    /// Numerator of the approval fraction.
+pub struct Fraction {
+    /// Numerator.
     pub numerator: u64,
-    /// Denominator of the approval fraction.
+    /// Denominator.
     pub denominator: u64,
 }
 
-impl ApprovalThreshold {
+impl Fraction {
+    /// The fraction `numerator / denominator`.
+    pub const fn new(numerator: u64, denominator: u64) -> Self {
+        Fraction {
+            numerator,
+            denominator,
+        }
+    }
+
     /// Approvals needed out of `members`: `⌈numerator × members / denominator⌉`.
     ///
     /// Returns `None` when the denominator is zero.
@@ -78,6 +103,21 @@ impl ApprovalThreshold {
         let scaled = u128::from(self.numerator) * u128::from(members);
         let denominator = u128::from(self.denominator);
         u64::try_from(scaled.div_ceil(denominator)).ok()
+    }
+
+    /// The value as `f64`, or `None` when the denominator is zero.
+    pub fn to_f64(&self) -> Option<f64> {
+        (self.denominator != 0).then(|| self.numerator as f64 / self.denominator as f64)
+    }
+
+    /// True when the fraction is strictly greater than one half.
+    pub fn exceeds_half(&self) -> bool {
+        2 * u128::from(self.numerator) > u128::from(self.denominator)
+    }
+
+    /// True when the fraction lies in `(0, 1]`.
+    pub fn is_proper(&self) -> bool {
+        self.denominator > 0 && self.numerator > 0 && self.numerator <= self.denominator
     }
 }
 
@@ -156,7 +196,7 @@ impl Default for Pacing {
     }
 }
 
-/// PoW-ID issuance parameters (SPEC §2, §3.5, §3.7, §3.9).
+/// PoW-ID issuance parameters (SPEC §2, §3.5, §3.7, §3.8, §3.9).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Issuance {
@@ -164,10 +204,21 @@ pub struct Issuance {
     pub pow_id_target_interval_s: Param<f64>,
     /// Fixed or adaptive issuance rate.
     pub rate_mode: Param<RateMode>,
+    /// Difficulty rule: Variant B (count-based, default) or Variant A (comparison).
+    pub difficulty_variant: Param<DifficultyVariant>,
+    /// Variant A comparison: retarget window K, in PoW-ID blocks.
+    pub retarget_window_blocks: Param<u32>,
+    /// Variant A comparison: largest difficulty change per retarget, as a factor.
+    pub retarget_clamp_factor: Param<f64>,
+    /// Variant B's correction from recent block times. No rule exists yet ("—"); M3 proposes
+    /// and tests one, so nothing reads this value.
+    pub count_based_correction: Param<Option<String>>,
     /// Minimum attack time floor `T_min` for adaptive issuance, in years.
     pub min_attack_time_floor_years: Param<f64>,
-    /// Adaptive-cap checkpoint interval as a fraction of `T_min` ("—" until chosen).
-    pub cap_checkpoint_interval_fraction_of_t_min: Param<Option<f64>>,
+    /// Adaptive-cap checkpoint interval as a fraction of `T_min`.
+    pub cap_checkpoint_interval_fraction_of_t_min: Param<f64>,
+    /// Adaptive-cap safety factor k in `R ≤ registered_IDs / (k × T_min)`.
+    pub cap_safety_factor: Param<Fraction>,
     /// Confirmation depth before a new ID becomes active, in PoW-ID blocks.
     pub confirmation_depth_blocks: Param<u32>,
     /// Hash-chain start rule.
@@ -184,10 +235,21 @@ impl Default for Issuance {
                 Sweep::values(vec![RateMode::Fixed, RateMode::Adaptive])
                     .with_note("fixed is decided; adaptive is the proposed variant (SPEC §3.9)"),
             ),
+            difficulty_variant: Param::decided(DifficultyVariant::CountBased).swept(
+                Sweep::values(vec![
+                    DifficultyVariant::CountBased,
+                    DifficultyVariant::BitcoinRetarget,
+                ])
+                .with_note("Variant A (Bitcoin-style retarget) is the comparison (SPEC §3.8)"),
+            ),
+            retarget_window_blocks: Param::decided(144),
+            retarget_clamp_factor: Param::decided(4.0),
+            count_based_correction: Param::with_status(None, Status::P),
             min_attack_time_floor_years: Param::with_status(2.0, Status::P)
                 .swept(Sweep::range(1.0, 10.0)),
-            cap_checkpoint_interval_fraction_of_t_min: Param::with_status(None, Status::O)
-                .swept(Sweep::values(vec![Some(0.25), Some(0.5), Some(1.0)])),
+            cap_checkpoint_interval_fraction_of_t_min: Param::decided(1.0)
+                .swept(Sweep::values(vec![0.25, 0.5, 1.0])),
+            cap_safety_factor: Param::decided(Fraction::new(7, 6)),
             confirmation_depth_blocks: Param::with_status(6, Status::O).swept(Sweep::range(3, 12)),
             start_rule: Param::decided(StartRule::A).swept(
                 Sweep::values(vec![StartRule::A, StartRule::B])
@@ -216,7 +278,7 @@ impl Default for Transactions {
     }
 }
 
-/// Witness Chain structure (SPEC §2, §4.1).
+/// Witness Chain structure and allocation (SPEC §2, §4.1, §4.2).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Witness {
@@ -226,6 +288,12 @@ pub struct Witness {
     pub subordinate_wcs_per_kwc: Param<u32>,
     /// Relation between the number of KWCs and WCs.
     pub kwc_count_rule: Param<KwcCountRule>,
+    /// Ring offsets of the subordinate WCs: KWC `w` has subordinates `(w + offset) mod W`.
+    pub ring_offsets: Param<Vec<u32>>,
+    /// Ring offsets in the 30-node comparison layout.
+    pub ring_offsets_30_node: Param<Vec<u32>>,
+    /// Blocks between an ID's confirmation and the block whose hash is its allocation beacon.
+    pub allocation_beacon_delay_blocks: Param<u32>,
     /// Registered miners watched per witness node.
     pub watched_registered_per_node: Param<u32>,
     /// Unregistered miners watched per witness node.
@@ -239,6 +307,10 @@ impl Default for Witness {
             subordinate_wcs_per_kwc: Param::decided(3)
                 .swept(Sweep::values(vec![3, 2]).with_note("1 + 2 (30 nodes) for comparison")),
             kwc_count_rule: Param::decided(KwcCountRule::EqualsWcCount),
+            ring_offsets: Param::decided(vec![1, 4, 6]),
+            ring_offsets_30_node: Param::decided(vec![1, 3]),
+            allocation_beacon_delay_blocks: Param::with_status(6, Status::O)
+                .swept(Sweep::values(vec![3, 6, 12])),
             watched_registered_per_node: Param::decided(800),
             watched_unregistered_per_node: Param::decided(200),
         }
@@ -389,12 +461,14 @@ pub struct Cac {
     pub size: Param<u32>,
     /// Membership policy.
     pub membership_policy: Param<CacMembershipPolicy>,
-    /// The miner of every n-th PoW-Tx block joins.
+    /// One new member joins for every n-th PoW-Tx block.
     pub join_every_n_tx_blocks: Param<u32>,
+    /// How the new member is chosen.
+    pub seat_selection: Param<CacSeatSelection>,
+    /// Lottery beacon offset k: the draw for block B uses the hash of block B + k.
+    pub lottery_beacon_offset_blocks: Param<u32>,
     /// Approval threshold, rounded up.
-    pub approval_threshold: Param<ApprovalThreshold>,
-    /// Whether one ID may hold two seats at once.
-    pub seat_rule: Param<CacSeatRule>,
+    pub approval_threshold: Param<Fraction>,
 }
 
 impl Default for Cac {
@@ -404,16 +478,16 @@ impl Default for Cac {
                 .swept(Sweep::range(100, 1000).with_note("100–1,000 for comparison")),
             membership_policy: Param::decided(CacMembershipPolicy::FirstInFirstOut),
             join_every_n_tx_blocks: Param::decided(10),
-            approval_threshold: Param::decided(ApprovalThreshold {
-                numerator: 2,
-                denominator: 3,
-            }),
-            seat_rule: Param::with_status(CacSeatRule::NextNonMember, Status::P).swept(
+            seat_selection: Param::decided(CacSeatSelection::Lottery).swept(
                 Sweep::values(vec![
-                    CacSeatRule::NextNonMember,
-                    CacSeatRule::AllowDuplicates,
-                ]),
+                    CacSeatSelection::Lottery,
+                    CacSeatSelection::TenthBlockMiner,
+                ])
+                .with_note("the v0.2 rule (miner of every 10th PoW-Tx block) is the comparison"),
             ),
+            lottery_beacon_offset_blocks: Param::with_status(3, Status::O)
+                .swept(Sweep::values(vec![1, 3, 6, 12])),
+            approval_threshold: Param::decided(Fraction::new(2, 3)),
         }
     }
 }
@@ -433,8 +507,8 @@ pub struct Genesis {
 impl Default for Genesis {
     fn default() -> Self {
         Genesis {
-            ids: Param::decided(2_100_000).swept(Sweep::values(vec![
-                500_000, 1_000_000, 2_000_000, 2_100_000, 3_000_000,
+            ids: Param::decided(2_900_000).swept(Sweep::values(vec![
+                1_000_000, 2_100_000, 2_900_000, 5_000_000, 10_000_000,
             ])),
             distribution: Param::decided(GenesisDistribution::KycOnePerVerifiedPerson),
             secretly_controlled_fraction: Param::with_status(0.0, Status::O)
@@ -521,10 +595,7 @@ mod tests {
 
     #[test]
     fn two_thirds_rounded_up_gives_spec_values() {
-        let rule = ApprovalThreshold {
-            numerator: 2,
-            denominator: 3,
-        };
+        let rule = Fraction::new(2, 3);
         assert_eq!(rule.approvals_needed(600), Some(400));
         assert_eq!(rule.approvals_needed(40), Some(27));
         assert_eq!(rule.approvals_needed(30), Some(20));
@@ -533,12 +604,31 @@ mod tests {
     }
 
     #[test]
-    fn zero_denominator_has_no_threshold() {
-        let rule = ApprovalThreshold {
-            numerator: 2,
-            denominator: 0,
-        };
+    fn quorum_fractions_round_up_as_in_the_section_g_preview() {
+        // Reference: hand-computed ceilings, for example ⌈0.51 × 40⌉ = ⌈20.4⌉ = 21.
+        assert_eq!(Fraction::new(51, 100).approvals_needed(40), Some(21));
+        assert_eq!(Fraction::new(55, 100).approvals_needed(40), Some(22));
+        assert_eq!(Fraction::new(60, 100).approvals_needed(40), Some(24));
+        assert_eq!(Fraction::new(75, 100).approvals_needed(40), Some(30));
+        assert_eq!(Fraction::new(51, 100).approvals_needed(600), Some(306));
+        assert_eq!(Fraction::new(2, 3).approvals_needed(10), Some(7));
+    }
+
+    #[test]
+    fn zero_denominator_has_no_threshold_or_value() {
+        let rule = Fraction::new(2, 0);
         assert_eq!(rule.approvals_needed(600), None);
+        assert_eq!(rule.to_f64(), None);
+        assert!(!rule.is_proper());
+    }
+
+    #[test]
+    fn half_is_not_above_half() {
+        assert!(!Fraction::new(1, 2).exceeds_half());
+        assert!(Fraction::new(51, 100).exceeds_half());
+        assert!(Fraction::new(7, 6).exceeds_half());
+        assert!(Fraction::new(1, 1).is_proper() && !Fraction::new(7, 6).is_proper());
+        assert_eq!(Fraction::new(7, 6).to_f64(), Some(7.0 / 6.0));
     }
 
     #[test]
@@ -547,9 +637,31 @@ mod tests {
     }
 
     #[test]
-    fn genesis_default_is_two_point_one_million_decided() {
+    fn genesis_default_is_two_point_nine_million_decided() {
         let genesis = Genesis::default();
-        assert_eq!(genesis.ids.value, 2_100_000);
+        assert_eq!(genesis.ids.value, 2_900_000);
         assert_eq!(genesis.ids.status, Status::D);
+    }
+
+    #[test]
+    fn spec_v0_3_defaults_are_recorded() {
+        let issuance = Issuance::default();
+        assert_eq!(issuance.cap_safety_factor.value, Fraction::new(7, 6));
+        assert_eq!(
+            issuance.cap_checkpoint_interval_fraction_of_t_min.value,
+            1.0
+        );
+        assert_eq!(
+            issuance.difficulty_variant.value,
+            DifficultyVariant::CountBased
+        );
+        assert_eq!(issuance.count_based_correction.status, Status::P);
+        let cac = Cac::default();
+        assert_eq!(cac.seat_selection.value, CacSeatSelection::Lottery);
+        assert_eq!(cac.lottery_beacon_offset_blocks.value, 3);
+        assert_eq!(cac.lottery_beacon_offset_blocks.status, Status::O);
+        let witness = Witness::default();
+        assert_eq!(witness.ring_offsets.value, vec![1, 4, 6]);
+        assert_eq!(witness.allocation_beacon_delay_blocks.value, 6);
     }
 }

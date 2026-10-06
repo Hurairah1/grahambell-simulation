@@ -2,8 +2,9 @@
 //!
 //! These are analysis inputs, not protocol parameters, so they carry no SPEC status tag.
 //! The defaults are the value lists given in the M1 brief and the architect's amendments of
-//! 2026-10-05.
+//! 2026-10-05 and 2026-10-06.
 
+use crate::protocol::Fraction;
 use serde::{Deserialize, Serialize};
 
 /// Modelling constants that are not protocol parameters.
@@ -51,7 +52,7 @@ pub struct TimeToThresholdGrid {
 impl Default for TimeToThresholdGrid {
     fn default() -> Self {
         TimeToThresholdGrid {
-            genesis_ids: vec![500_000, 1_000_000, 2_000_000, 2_100_000, 3_000_000],
+            genesis_ids: vec![1_000_000, 2_100_000, 2_900_000, 5_000_000, 10_000_000],
             attacker_shares: vec![
                 0.05, 0.10, 0.20, 0.25, 0.30, 0.34, 0.40, 0.52, 0.55, 0.60, 0.75, 1.0,
             ],
@@ -79,8 +80,11 @@ pub struct WitnessGrid {
     pub composition_horizon_years: f64,
     /// Starting KWC counts for the composition count.
     pub composition_initial_kwc_counts: Vec<u64>,
-    /// Ban-replacement rates, as fractions of registered IDs per year (sensitivity).
-    pub ban_replacement_rates_per_year: Vec<f64>,
+    /// Ban rates, as fractions of registered IDs per year (sensitivity; 0 is the base case).
+    pub ban_rates_per_year: Vec<f64>,
+    /// Deactivation cycles (deactivation, then re-activation) per registered ID per year. An
+    /// illustrative sensitivity until M3 provides household downtime profiles.
+    pub deactivation_cycles_per_id_per_year: Vec<f64>,
 }
 
 impl Default for WitnessGrid {
@@ -89,8 +93,9 @@ impl Default for WitnessGrid {
             attacker_fractions: vec![0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.33, 0.40],
             kwc_counts: vec![10_000, 100_000, 1_000_000],
             composition_horizon_years: 10.0,
-            composition_initial_kwc_counts: vec![10_000, 100_000, 210_000, 1_000_000],
-            ban_replacement_rates_per_year: vec![0.0, 0.01, 0.05],
+            composition_initial_kwc_counts: vec![10_000, 100_000, 290_000, 1_000_000],
+            ban_rates_per_year: vec![0.0, 0.01, 0.05],
+            deactivation_cycles_per_id_per_year: vec![0.0, 1.0, 4.0],
         }
     }
 }
@@ -103,9 +108,10 @@ pub struct CacGrid {
     pub committee_sizes: Vec<u64>,
     /// Attacker's fraction p of active IDs.
     pub attacker_fractions: Vec<f64>,
-    /// Active IDs in the base case, all of which mine.
-    pub mining_population: u64,
-    /// Fractions of honest IDs that mine (attacker IDs always mine).
+    /// Active IDs: the canonical active list the lottery draws from.
+    pub active_population: u64,
+    /// Fractions of honest IDs that mine, for the v0.2 comparison rule (attacker IDs always
+    /// mine).
     pub honest_mining_fractions: Vec<f64>,
 }
 
@@ -114,7 +120,7 @@ impl Default for CacGrid {
         CacGrid {
             committee_sizes: vec![30, 100, 600, 1000],
             attacker_fractions: vec![0.1, 0.2, 0.25, 0.3, 0.33, 0.4],
-            mining_population: 2_100_000,
+            active_population: 2_900_000,
             honest_mining_fractions: vec![0.5, 0.7, 1.0],
         }
     }
@@ -143,23 +149,20 @@ impl Default for RestartGrid {
 }
 
 /// Section E grid: difficulty hopping.
+///
+/// The retarget window and clamp of the Variant A comparison are protocol parameters
+/// (`issuance.retarget_window_blocks`, `issuance.retarget_clamp_factor`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HoppingGrid {
-    /// Retarget windows K, in blocks.
-    pub window_blocks: Vec<u64>,
     /// Attacker miners added for one window, as multiples m of the honest miners.
     pub attacker_ratios: Vec<f64>,
-    /// Maximum retarget factor per window for the clamped variant.
-    pub clamp_factor: f64,
 }
 
 impl Default for HoppingGrid {
     fn default() -> Self {
         HoppingGrid {
-            window_blocks: vec![144, 2016],
             attacker_ratios: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0],
-            clamp_factor: 4.0,
         }
     }
 }
@@ -186,6 +189,51 @@ impl Default for TiesGrid {
     }
 }
 
+/// Section G grid: the quorum trade-off.
+///
+/// The CAC part uses the committee size `cac.size` and the active population of the section C
+/// grid; the 10-year counts use the horizon of the section B grid.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QuorumTradeoffGrid {
+    /// Quorum fractions q applied to the 40-member pool and to each group of the registered
+    /// layout (G1).
+    pub quorum_fractions: Vec<Fraction>,
+    /// PoWit-only quorum fractions for the split rule (G2).
+    pub powit_quorum_fractions: Vec<Fraction>,
+    /// Quorum for decisions that global validation cannot re-check (G2).
+    pub decision_quorum: Fraction,
+    /// Committee quorum fractions (G3).
+    pub cac_quorum_fractions: Vec<Fraction>,
+    /// Attacker's fraction p of registered (or active) IDs.
+    pub attacker_fractions: Vec<f64>,
+    /// Network sizes, in KWCs.
+    pub kwc_counts: Vec<u64>,
+}
+
+impl Default for QuorumTradeoffGrid {
+    fn default() -> Self {
+        QuorumTradeoffGrid {
+            quorum_fractions: vec![
+                Fraction::new(51, 100),
+                Fraction::new(55, 100),
+                Fraction::new(60, 100),
+                Fraction::new(2, 3),
+                Fraction::new(75, 100),
+            ],
+            powit_quorum_fractions: vec![
+                Fraction::new(51, 100),
+                Fraction::new(55, 100),
+                Fraction::new(60, 100),
+            ],
+            decision_quorum: Fraction::new(2, 3),
+            cac_quorum_fractions: vec![Fraction::new(51, 100), Fraction::new(2, 3)],
+            attacker_fractions: vec![0.05, 0.10, 0.20, 0.25, 0.30, 0.33, 0.40, 0.45, 0.49],
+            kwc_counts: vec![100_000, 1_000_000],
+        }
+    }
+}
+
 /// All M1 grids.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -202,6 +250,8 @@ pub struct AnalyticConfig {
     pub hopping: HoppingGrid,
     /// Section F.
     pub ties: TiesGrid,
+    /// Section G.
+    pub quorum_tradeoff: QuorumTradeoffGrid,
 }
 
 /// Sample sizes for the seeded Monte Carlo cross-checks.
@@ -216,10 +266,12 @@ pub struct MonteCarloConfig {
     pub partition_replicates: u64,
     /// WCs in the random-partition simulation (section B).
     pub partition_wcs: u64,
-    /// Committee refreshes in the sliding-committee simulation (section C).
+    /// Committee refreshes in each sliding-committee simulation (section C).
     pub committee_refreshes: u64,
-    /// Finite ID population in the sliding-committee simulation (section C).
+    /// Mining IDs in the simulation of the v0.2 comparison rule (section C).
     pub committee_population: u64,
+    /// Length of the canonical active list in the lottery simulation (section C).
+    pub lottery_population: u64,
     /// Successful IDs per restart-attack simulation (section D).
     pub restart_successes: u64,
     /// Trials of the per-round-entropy restart simulation (section D).
@@ -243,6 +295,7 @@ impl Default for MonteCarloConfig {
             partition_wcs: 1_000,
             committee_refreshes: 4_000_000,
             committee_population: 10_000,
+            lottery_population: 100_000,
             restart_successes: 20_000,
             per_round_trials: 20_000,
             hopping_replicates: 4_000,

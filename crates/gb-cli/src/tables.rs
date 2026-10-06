@@ -38,6 +38,9 @@ pub const TABLE_FILES: &[&str] = &[
     "D2_restart_advantage_curve.csv",
     "E1_difficulty_hopping.csv",
     "F1_tie_rate.csv",
+    "G1_quorum_kwc.csv",
+    "G2_split_rule.csv",
+    "G3_cac_quorum.csv",
     "validation.csv",
     "parameters.csv",
 ];
@@ -66,8 +69,11 @@ pub fn write_tables(dir: &Path, config: &Config, results: &M1Results) -> anyhow:
     write_csv(&out(TABLE_FILES[15]), &results.d_curve)?;
     write_csv(&out(TABLE_FILES[16]), &results.e)?;
     write_csv(&out(TABLE_FILES[17]), &results.f)?;
-    write_csv(&out(TABLE_FILES[18]), &results.checks)?;
-    write_csv(&out(TABLE_FILES[19]), &parameter_listing(config)?)?;
+    write_csv(&out(TABLE_FILES[18]), &results.g.quorum)?;
+    write_csv(&out(TABLE_FILES[19]), &results.g.split)?;
+    write_csv(&out(TABLE_FILES[20]), &results.g.cac)?;
+    write_csv(&out(TABLE_FILES[21]), &results.checks)?;
+    write_csv(&out(TABLE_FILES[22]), &parameter_listing(config)?)?;
     Ok(())
 }
 

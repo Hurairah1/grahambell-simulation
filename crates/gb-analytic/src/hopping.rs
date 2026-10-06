@@ -1,6 +1,12 @@
 //! Section E — difficulty hopping (SPEC §3.8, §8 S6, §10 H5).
 //!
-//! # Variant A: Bitcoin-style retargeting
+//! SPEC v0.3 makes Variant B (count-based) the default and keeps Variant A as the
+//! comparison, with window `K = 144` PoW-ID blocks and a 4× clamp per retarget. Both values
+//! are protocol parameters (`issuance.retarget_window_blocks`,
+//! `issuance.retarget_clamp_factor`). The table also shows Variant A without a clamp, as a
+//! sensitivity.
+//!
+//! # Variant A (comparison): Bitcoin-style retargeting
 //!
 //! Difficulty is retargeted every `K` blocks so that the last window would have lasted
 //! `K·I`. Honest miners `H` are constant, and difficulty is calibrated to them. An attacker
@@ -12,7 +18,7 @@
 //!   `K·I/(1 + m)`. The attacker wins `m/(1 + m)` of its `K` blocks: `K·m/(1 + m)` IDs.
 //! - **Recovery window.** The retarget raises difficulty by `(1 + m)`, so the honest-only next
 //!   window lasts `K·I·(1 + m)`. With a retarget clamp `c`, it lasts `K·I·min(1 + m, c)`.
-//! - **Variant B comparison.** Count-based difficulty follows the admitted count exactly, so
+//! - **Variant B (default).** Count-based difficulty follows the admitted count exactly, so
 //!   blocks keep arriving every `I`. The same participation time, `K·I/(1 + m)`, then earns
 //!   `K·m/(1 + m)²` IDs.
 //! - **Gain.** IDs per attacker miner-second, Variant A over Variant B, is `1 + m`. The clamp
@@ -100,28 +106,35 @@ pub struct HopRow {
     pub cycle_issuance_ratio: f64,
 }
 
+/// Variant A comparison settings from the configuration: window K and clamp factor.
+fn variant_a(config: &Config) -> (u64, f64) {
+    (
+        u64::from(config.issuance.retarget_window_blocks.value),
+        config.issuance.retarget_clamp_factor.value,
+    )
+}
+
 /// Builds the E1 table from the configuration.
 pub fn section_e(config: &Config) -> Result<Vec<HopRow>> {
     let grid = &config.analytic.hopping;
     let interval = config.issuance.pow_id_target_interval_s.value;
+    let (window, clamp_factor) = variant_a(config);
     let mut rows = Vec::new();
-    for &window in &grid.window_blocks {
-        for &ratio in &grid.attacker_ratios {
-            for clamp in [None, Some(grid.clamp_factor)] {
-                let hop = first_order(window, ratio, interval, clamp)?;
-                rows.push(HopRow {
-                    window_blocks: window,
-                    attacker_ratio: ratio,
-                    clamp: clamp.map_or("none".to_string(), |c| format!("{c}x")),
-                    attacker_ids_variant_a: hop.attacker_ids_variant_a,
-                    attacker_ids_variant_b: hop.attacker_ids_variant_b,
-                    gain_factor: hop.gain_factor,
-                    gain_percent: 100.0 * (hop.gain_factor - 1.0),
-                    attack_window_hours: hop.attack_window_s / 3_600.0,
-                    recovery_window_hours: hop.recovery_window_s / 3_600.0,
-                    cycle_issuance_ratio: hop.cycle_issuance_ratio,
-                });
-            }
+    for &ratio in &grid.attacker_ratios {
+        for clamp in [None, Some(clamp_factor)] {
+            let hop = first_order(window, ratio, interval, clamp)?;
+            rows.push(HopRow {
+                window_blocks: window,
+                attacker_ratio: ratio,
+                clamp: clamp.map_or("none".to_string(), |c| format!("{c}x")),
+                attacker_ids_variant_a: hop.attacker_ids_variant_a,
+                attacker_ids_variant_b: hop.attacker_ids_variant_b,
+                gain_factor: hop.gain_factor,
+                gain_percent: 100.0 * (hop.gain_factor - 1.0),
+                attack_window_hours: hop.attack_window_s / 3_600.0,
+                recovery_window_hours: hop.recovery_window_s / 3_600.0,
+                cycle_issuance_ratio: hop.cycle_issuance_ratio,
+            });
         }
     }
     Ok(rows)
@@ -186,71 +199,71 @@ pub fn simulate_hop(
 
 /// Section E cross-checks.
 pub fn checks(config: &Config) -> Result<Vec<Check>> {
-    let grid = &config.analytic.hopping;
     let mc = &config.run.monte_carlo;
     let k = mc.tolerance_standard_errors;
     let interval = config.issuance.pow_id_target_interval_s.value;
+    let (window, clamp_factor) = variant_a(config);
     let mut checks = Vec::new();
-    for &window in &grid.window_blocks {
-        for ratio in [0.5, 1.0, 4.0] {
-            for clamp in [None, Some(grid.clamp_factor)] {
-                let hop = first_order(window, ratio, interval, clamp)?;
-                let sim = simulate_hop(
-                    config.run.seed,
-                    window,
-                    ratio,
-                    interval,
-                    clamp,
-                    false,
-                    mc.hopping_replicates,
-                );
-                let tag = clamp.map_or("noclamp".to_string(), |c| format!("clamp{c}"));
-                checks.push(Check::monte_carlo(
-                    "E",
-                    &format!("E-mc-gain-A-K{window}-m{ratio}-{tag}"),
-                    &format!("Variant A, K={window}, m={ratio}, {tag}: simulated gain vs first-order 1 + m"),
-                    hop.gain_factor,
-                    sim.gain,
-                    k,
-                    0.0,
-                ));
-                let clamped = clamp.is_some_and(|c| 1.0 + ratio > c);
-                let jensen = if clamped {
-                    1.0
-                } else {
-                    window as f64 / (window as f64 - 1.0)
-                };
-                checks.push(Check::monte_carlo(
-                    "E",
-                    &format!("E-mc-recovery-A-K{window}-m{ratio}-{tag}"),
-                    &format!(
-                        "Variant A, K={window}, m={ratio}, {tag}: simulated recovery window vs first-order value × {jensen:.5} (K/(K-1) when unclamped)"
-                    ),
-                    hop.recovery_window_s * jensen,
-                    sim.recovery_window_s,
-                    k,
-                    0.0,
-                ));
-            }
-            let b = simulate_hop(
+    for ratio in [0.5, 1.0, 4.0] {
+        for clamp in [None, Some(clamp_factor)] {
+            let hop = first_order(window, ratio, interval, clamp)?;
+            let sim = simulate_hop(
                 config.run.seed,
                 window,
                 ratio,
                 interval,
-                None,
-                true,
+                clamp,
+                false,
                 mc.hopping_replicates,
             );
+            let tag = clamp.map_or("noclamp".to_string(), |c| format!("clamp{c}"));
             checks.push(Check::monte_carlo(
                 "E",
-                &format!("E-mc-gain-B-K{window}-m{ratio}"),
-                &format!("Variant B (exact count), K={window}, m={ratio}: simulated gain vs 1 (no hopping gain)"),
-                1.0,
-                b.gain,
+                &format!("E-mc-gain-A-K{window}-m{ratio}-{tag}"),
+                &format!(
+                    "Variant A, K={window}, m={ratio}, {tag}: simulated gain vs first-order 1 + m"
+                ),
+                hop.gain_factor,
+                sim.gain,
+                k,
+                0.0,
+            ));
+            let clamped = clamp.is_some_and(|c| 1.0 + ratio > c);
+            let jensen = if clamped {
+                1.0
+            } else {
+                window as f64 / (window as f64 - 1.0)
+            };
+            checks.push(Check::monte_carlo(
+                "E",
+                &format!("E-mc-recovery-A-K{window}-m{ratio}-{tag}"),
+                &format!(
+                    "Variant A, K={window}, m={ratio}, {tag}: simulated recovery window vs first-order value × {jensen:.5} (K/(K-1) when unclamped)"
+                ),
+                hop.recovery_window_s * jensen,
+                sim.recovery_window_s,
                 k,
                 0.0,
             ));
         }
+        let b = simulate_hop(
+            config.run.seed,
+            window,
+            ratio,
+            interval,
+            None,
+            true,
+            mc.hopping_replicates,
+        );
+        checks.push(Check::monte_carlo(
+            "E",
+            &format!("E-mc-gain-B-K{window}-m{ratio}"),
+            &format!("Variant B (exact count), K={window}, m={ratio}: simulated gain vs 1 (no hopping gain)"),
+            1.0,
+            b.gain,
+            k,
+            0.0,
+        ));
     }
     Ok(checks)
 }
@@ -291,15 +304,15 @@ mod tests {
     }
 
     #[test]
-    fn section_e_table_has_both_clamp_variants() {
+    fn section_e_table_has_both_clamp_variants_at_the_spec_window() {
         let config = Config::default();
         let rows = section_e(&config).unwrap();
-        let g = &config.analytic.hopping;
         assert_eq!(
             rows.len(),
-            g.window_blocks.len() * g.attacker_ratios.len() * 2
+            config.analytic.hopping.attacker_ratios.len() * 2
         );
         assert!(rows.iter().any(|r| r.clamp == "4x"));
+        assert!(rows.iter().all(|r| r.window_blocks == 144));
     }
 
     #[test]

@@ -62,7 +62,7 @@ mod tests {
         let listing = parameter_listing(&Config::default()).unwrap();
         let text = render_listing(&listing, ListingFormat::Markdown).unwrap();
         assert_eq!(text.lines().count(), listing.len() + 2);
-        assert!(text.contains("`genesis.ids` | 2100000 | D"));
+        assert!(text.contains("`genesis.ids` | 2900000 | D"));
     }
 
     #[test]

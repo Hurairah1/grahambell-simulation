@@ -31,10 +31,28 @@
 //! value `1 − (1 − q)^W` is an **upper bound** on P(at least one). A KWC shares WCs with at
 //! most `d = (1 + s)·s` others, so some `⌈W/(d + 1)⌉` KWCs share no WC. They are independent,
 //! which gives the lower bound `1 − (1 − q)^⌈W/(d+1)⌉`.
+//!
+//! # Compositions over ten years (SPEC §10 H6)
+//!
+//! Under the adopted allocation (SPEC §4.2) every insertion of an ID (new or re-activated)
+//! changes one member of an existing WC, and so the composition of the `1 + s` KWCs that WC
+//! sits in. One insertion in `wc_size` also completes a WC: its own KWC forms, and the
+//! `d_max` KWCs whose ring offsets wrap around relink, where `d_max` is the largest offset.
+//! A removal (ban or deactivation) changes one WC and, one time in `wc_size`, dissolves the
+//! last WC and relinks `d_max` KWCs. Per event, on average:
+//!
+//! - insertion: `(1 + s) + (1 + d_max)/wc_size` compositions (4.7 for the 40-node layout);
+//! - removal: `(1 + s) + d_max/wc_size` compositions (4.6).
+//!
+//! Every allocation keeps each KWC's composition a uniformly random draw, so the expected
+//! number of compositions in a state is exactly the count times the per-composition
+//! probability, whatever the correlation between consecutive compositions. Consecutive
+//! compositions share all but one seat, so one episode in a state can span several
+//! compositions; the one-seat entry ratio below measures that.
 
 use crate::dist::{ExactDistribution, JointDistribution, SeatModel};
 use crate::error::{Result, ensure};
-use crate::exact::{Q, decimal, integer, log10, scientific, to_f64};
+use crate::exact::{Q, decimal, integer, log10, ratio, scientific, to_f64};
 use crate::logspace;
 use crate::mc::{RunningStats, shuffle};
 use crate::validation::Check;
@@ -95,6 +113,8 @@ pub struct KwcSpec {
     pub wc_size: u64,
     /// Subordinate WCs per KWC.
     pub subordinate_wcs: u64,
+    /// Golomb-ring offsets of the subordinate WCs (SPEC §4.2).
+    pub ring_offsets: Vec<u64>,
     /// Registered quorum from the leader WC.
     pub leader_min: u64,
     /// Registered quorum from the subordinate WCs.
@@ -117,21 +137,25 @@ impl KwcSpec {
     fn from_config(config: &Config, subordinate_wcs: u64) -> KwcSpec {
         let wc_size = u64::from(config.witness.wc_size.value);
         let q = &config.quorum;
-        let (subordinate_min, unregistered_min) = if subordinate_wcs == 2 {
+        let w = &config.witness;
+        let (subordinate_min, unregistered_min, offsets) = if subordinate_wcs == 2 {
             (
                 q.registered_subordinate_min_30_node.value,
                 q.unregistered_total_min_30_node.value,
+                &w.ring_offsets_30_node.value,
             )
         } else {
             (
                 q.registered_subordinate_min.value,
                 q.unregistered_total_min.value,
+                &w.ring_offsets.value,
             )
         };
         KwcSpec {
             label: format!("{}-node", wc_size * (1 + subordinate_wcs)),
             wc_size,
             subordinate_wcs,
+            ring_offsets: offsets.iter().map(|o| u64::from(*o)).collect(),
             leader_min: u64::from(q.registered_leader_min.value),
             subordinate_min: u64::from(subordinate_min),
             unregistered_min: u64::from(unregistered_min),
@@ -156,6 +180,11 @@ impl KwcSpec {
     /// Other KWCs that share at least one WC with a given KWC, at most `(1 + s)·s`.
     pub fn overlap_degree(&self) -> u64 {
         (1 + self.subordinate_wcs) * self.subordinate_wcs
+    }
+
+    /// Largest ring offset, `d_max`.
+    pub fn max_offset(&self) -> u64 {
+        self.ring_offsets.iter().copied().max().unwrap_or(0)
     }
 
     /// True when `leader` and `subordinate` attacker seats put the KWC in `state`.
@@ -294,26 +323,128 @@ pub fn network_summary(q: &Q, kwcs: u64, overlap_degree: u64) -> NetworkSummary 
     }
 }
 
-/// KWC compositions formed over a horizon under the SPEC §10 H6 refresh model.
+/// Inputs to the KWC-composition count over a horizon (SPEC §10 H6 refresh model).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompositionInputs {
+    /// KWCs at the start, `W0`.
+    pub initial_kwcs: u64,
+    /// Horizon `H`, in years.
+    pub horizon_years: f64,
+    /// New IDs per year, `R`.
+    pub issuance_per_year: f64,
+    /// Bans per year, as a fraction of registered IDs.
+    pub ban_rate: f64,
+    /// Deactivation cycles (deactivation, then re-activation) per registered ID per year.
+    pub deactivation_cycles: f64,
+}
+
+impl CompositionInputs {
+    /// Registered-ID-years over the horizon: IDs grow from `wc_size·W0` at `R` per year, so
+    /// the integral is `wc_size·W0·H + R·H²/2`.
+    pub fn id_years(&self, wc_size: u64) -> f64 {
+        let h = self.horizon_years;
+        wc_size as f64 * self.initial_kwcs as f64 * h + self.issuance_per_year * h * h / 2.0
+    }
+}
+
+/// Compositions formed per inserted ID (new or re-activated) under the adopted allocation:
+/// `(1 + s) + (1 + d_max)/wc_size` (see the module documentation).
+pub fn compositions_per_insertion(spec: &KwcSpec) -> f64 {
+    (1 + spec.subordinate_wcs) as f64 + (1 + spec.max_offset()) as f64 / spec.wc_size as f64
+}
+
+/// Compositions formed per removed ID (ban or deactivation) under the adopted allocation:
+/// `(1 + s) + d_max/wc_size`.
+pub fn compositions_per_removal(spec: &KwcSpec) -> f64 {
+    (1 + spec.subordinate_wcs) as f64 + spec.max_offset() as f64 / spec.wc_size as f64
+}
+
+/// KWC compositions formed over the horizon under the adopted allocation (SPEC §4.2): the
+/// initial KWCs, plus every insertion and removal from issuance, bans and deactivation cycles.
+pub fn composition_count(spec: &KwcSpec, inputs: &CompositionInputs) -> f64 {
+    let insertion = compositions_per_insertion(spec);
+    let removal = compositions_per_removal(spec);
+    let id_years = inputs.id_years(spec.wc_size);
+    inputs.initial_kwcs as f64
+        + inputs.issuance_per_year * inputs.horizon_years * insertion
+        + inputs.ban_rate * id_years * removal
+        + inputs.deactivation_cycles * id_years * (insertion + removal)
+}
+
+/// KWC compositions under the v0.2 counting model (comparison): one new KWC per new WC
+/// (`R / wc_size` per year) and `1 + s` compositions per ban replacement. Deactivation did not
+/// change seats in v0.2, so `deactivation_cycles` is ignored.
+pub fn composition_count_v02(spec: &KwcSpec, inputs: &CompositionInputs) -> f64 {
+    let new_kwcs = inputs.horizon_years * inputs.issuance_per_year / spec.wc_size as f64;
+    let replacements =
+        (1 + spec.subordinate_wcs) as f64 * inputs.ban_rate * inputs.id_years(spec.wc_size);
+    inputs.initial_kwcs as f64 + new_kwcs + replacements
+}
+
+/// Probability that one seat change moves a KWC into `state` from outside it, under the
+/// binomial model with attacker probability `p`.
 ///
-/// Starts with `initial_kwcs`. Adds one new KWC per new WC (`R / wc_size` per year), and
-/// `(1 + s)` compositions per ban replacement, because a replaced member's WC sits in
-/// `1 + s` KWCs. Bans occur at `ban_rate` of registered IDs per year, and registered IDs
-/// grow from `wc_size·W0` at `R` per year.
-pub fn composition_count(
-    initial_kwcs: u64,
-    horizon_years: f64,
-    issuance_per_year: f64,
-    wc_size: u64,
-    subordinate_wcs: u64,
-    ban_rate: f64,
-) -> f64 {
-    let w0 = initial_kwcs as f64;
-    let new_kwcs = horizon_years * issuance_per_year / wc_size as f64;
-    let id_years = wc_size as f64 * w0 * horizon_years
-        + issuance_per_year * horizon_years * horizon_years / 2.0;
-    let replacements = (1 + subordinate_wcs) as f64 * ban_rate * id_years;
-    w0 + new_kwcs + replacements
+/// One seat, chosen uniformly from the KWC's seats, is replaced by a new member that is the
+/// attacker's with probability `p`. Under the adopted allocation this is how most
+/// compositions change (see the module documentation).
+pub fn one_seat_entry_probability(
+    spec: &KwcSpec,
+    kind: MinerKind,
+    state: KwcState,
+    p: &Q,
+) -> Result<Q> {
+    let model = SeatModel::Binomial(p.clone());
+    let one = Q::one();
+    let honest = &one - p;
+    let (n1, n2) = (spec.leader_seats(), spec.subordinate_seats());
+    let total = integer(n1 + n2);
+    // Probability that replacing one seat of a group of `size` holding `seats` attacker seats
+    // moves the count up (honest replaced by attacker) or down.
+    let up = |seats: u64, size: u64| integer(size - seats) / integer(size) * p;
+    let down = |seats: u64, size: u64| integer(seats) / integer(size) * &honest;
+    let mut entry = Q::zero();
+    match kind {
+        MinerKind::Unregistered => {
+            let n = n1 + n2;
+            let d = ExactDistribution::new(n, &model)?;
+            for x in (0..=n).filter(|x| !spec.unregistered_state(state, *x)) {
+                let mut moves = Q::zero();
+                if x < n && spec.unregistered_state(state, x + 1) {
+                    moves += up(x, n);
+                }
+                if x > 0 && spec.unregistered_state(state, x - 1) {
+                    moves += down(x, n);
+                }
+                entry += d.pmf(x) * moves;
+            }
+        }
+        MinerKind::Registered => {
+            let joint = JointDistribution::new(n1, n2, &model)?;
+            let leader_share = integer(n1) / &total;
+            let subordinate_share = integer(n2) / &total;
+            for x in 0..=n1 {
+                for y in (0..=n2).filter(|y| !spec.registered_state(state, x, *y)) {
+                    let mut moves = Q::zero();
+                    if x < n1 && spec.registered_state(state, x + 1, y) {
+                        moves += &leader_share * up(x, n1);
+                    }
+                    if x > 0 && spec.registered_state(state, x - 1, y) {
+                        moves += &leader_share * down(x, n1);
+                    }
+                    if y < n2 && spec.registered_state(state, x, y + 1) {
+                        moves += &subordinate_share * up(y, n2);
+                    }
+                    if y > 0 && spec.registered_state(state, x, y - 1) {
+                        moves += &subordinate_share * down(y, n2);
+                    }
+                    if !moves.is_zero() {
+                        entry += joint.pmf(x, y) * moves;
+                    }
+                }
+            }
+        }
+    }
+    Ok(entry)
 }
 
 /// KWC membership for a Golomb-ruler ring: KWC `w` is led by WC `w` and has subordinate WCs
@@ -431,7 +562,8 @@ pub struct ComparisonRow {
     pub relative_difference: f64,
 }
 
-/// B4: expected sign-capable KWC compositions over the horizon (SPEC §10 H6 refresh model).
+/// B4: expected KWC compositions able to sign without honest members over the horizon
+/// (SPEC §10 H6 refresh model).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CompositionRow {
     /// Miner kind whose quorum is used.
@@ -440,16 +572,25 @@ pub struct CompositionRow {
     pub attacker_fraction: f64,
     /// KWCs at the start.
     pub initial_kwcs: u64,
-    /// Ban replacements per year as a fraction of registered IDs (sensitivity).
-    pub ban_replacement_rate_per_year: f64,
+    /// Bans per year as a fraction of registered IDs (sensitivity; 0 is the base case).
+    pub ban_rate_per_year: f64,
+    /// Deactivation cycles per registered ID per year (illustrative sensitivity).
+    pub deactivation_cycles_per_id_per_year: f64,
     /// Horizon in years.
     pub horizon_years: f64,
-    /// KWC compositions formed over the horizon, each counted as an independent draw.
+    /// KWC compositions formed over the horizon under the adopted allocation (SPEC §4.2).
     pub compositions: f64,
     /// Per-composition probability of (ii), binomial model.
     pub sign_probability: String,
-    /// Expected sign-capable compositions over the horizon.
+    /// Expected compositions in state (ii) over the horizon, adopted allocation.
     pub expected_sign_capable: f64,
+    /// One-seat change: probability of entering (ii) divided by the per-composition
+    /// probability (1 would mean every change is as good as a fresh draw).
+    pub one_seat_entry_ratio: f64,
+    /// Comparison: compositions under the v0.2 count (no deactivation term).
+    pub compositions_v02_comparison: f64,
+    /// Comparison: expected compositions in state (ii) under the v0.2 count.
+    pub expected_sign_capable_v02_comparison: f64,
 }
 
 /// All section B tables.
@@ -599,32 +740,43 @@ fn composition_rows(config: &Config) -> Result<Vec<CompositionRow>> {
     let mut rows = Vec::new();
     for kind in KINDS {
         for p_f in &grid.attacker_fractions {
-            let q = state_probability(
-                &spec,
-                kind,
-                KwcState::Sign,
-                &SeatModel::Binomial(decimal(*p_f)?),
-            )?;
+            let p = decimal(*p_f)?;
+            let q =
+                state_probability(&spec, kind, KwcState::Sign, &SeatModel::Binomial(p.clone()))?;
+            let entry = one_seat_entry_probability(&spec, kind, KwcState::Sign, &p)?;
+            let entry_ratio = if q.is_zero() {
+                0.0
+            } else {
+                to_f64(&(&entry / &q))
+            };
+            let q_f = to_f64(&q);
             for &w0 in &grid.composition_initial_kwc_counts {
-                for &ban in &grid.ban_replacement_rates_per_year {
-                    let compositions = composition_count(
-                        w0,
-                        grid.composition_horizon_years,
-                        issuance,
-                        spec.wc_size,
-                        spec.subordinate_wcs,
-                        ban,
-                    );
-                    rows.push(CompositionRow {
-                        miner_kind: kind.label(),
-                        attacker_fraction: *p_f,
-                        initial_kwcs: w0,
-                        ban_replacement_rate_per_year: ban,
-                        horizon_years: grid.composition_horizon_years,
-                        compositions,
-                        sign_probability: scientific(&q, 6),
-                        expected_sign_capable: compositions * to_f64(&q),
-                    });
+                for &ban in &grid.ban_rates_per_year {
+                    for &cycles in &grid.deactivation_cycles_per_id_per_year {
+                        let inputs = CompositionInputs {
+                            initial_kwcs: w0,
+                            horizon_years: grid.composition_horizon_years,
+                            issuance_per_year: issuance,
+                            ban_rate: ban,
+                            deactivation_cycles: cycles,
+                        };
+                        let compositions = composition_count(&spec, &inputs);
+                        let v02 = composition_count_v02(&spec, &inputs);
+                        rows.push(CompositionRow {
+                            miner_kind: kind.label(),
+                            attacker_fraction: *p_f,
+                            initial_kwcs: w0,
+                            ban_rate_per_year: ban,
+                            deactivation_cycles_per_id_per_year: cycles,
+                            horizon_years: grid.composition_horizon_years,
+                            compositions,
+                            sign_probability: scientific(&q, 6),
+                            expected_sign_capable: compositions * q_f,
+                            one_seat_entry_ratio: entry_ratio,
+                            compositions_v02_comparison: v02,
+                            expected_sign_capable_v02_comparison: v02 * q_f,
+                        });
+                    }
                 }
             }
         }
@@ -640,8 +792,10 @@ pub fn checks(config: &Config, tables: &SectionB) -> Result<Vec<Check>> {
         log_space_check(config)?,
         invariant_check(tables),
         convergence_check(tables),
-        ring_check(),
+        ring_check(config),
         dynamic_programming_check(config)?,
+        allocation_composition_check(config)?,
+        one_seat_entry_check()?,
     ];
     checks.extend(partition_monte_carlo_checks(config)?);
     Ok(checks)
@@ -773,21 +927,149 @@ fn convergence_check(tables: &SectionB) -> Check {
     )
 }
 
-fn ring_check() -> Check {
+fn ring_check(config: &Config) -> Check {
+    let forty = KwcSpec::forty_node(config);
+    let thirty = KwcSpec::thirty_node(config);
+    // A ring with largest offset d needs W > 2d (no mutual pairs) and the Golomb property.
+    let smallest = |spec: &KwcSpec| 2 * spec.max_offset() + 1;
     let mut violations = 0;
     let mut layouts = 0;
-    for wcs in [13_u64, 14, 20, 50, 200] {
+    for wcs in [0_u64, 1, 7, 37, 187] {
         layouts += 2;
-        violations += ring_violations(&golomb_ring(wcs, &[1, 4, 6]));
-        violations += ring_violations(&golomb_ring(wcs.max(7), &[1, 3]));
+        violations += ring_violations(&golomb_ring(smallest(&forty) + wcs, &forty.ring_offsets));
+        violations += ring_violations(&golomb_ring(smallest(&thirty) + wcs, &thirty.ring_offsets));
     }
     Check::all_rows(
         "B",
         "B-golomb-ring",
-        "proposed ring: each WC leads one KWC, is subordinate in exactly s, no mutual pairs, KWCs share at most one WC",
+        "configured ring (SPEC §4.2): each WC leads one KWC, is subordinate in exactly s, no mutual pairs, KWCs share at most one WC",
         violations,
         layouts,
     )
+}
+
+/// Simulates the adopted allocation (SPEC §4.2) on a small network and counts how many KWC
+/// compositions change per insertion and per removal, against the closed-form rates.
+///
+/// A KWC's composition is recorded as its WC indices in ascending order, each with that WC's
+/// members sorted. WCs are disjoint and every seat holds a distinct ID, so two records are
+/// equal exactly when the KWCs have the same member set.
+fn simulate_allocation_compositions(spec: &KwcSpec, start_ids: u64, events: u64) -> (f64, f64) {
+    type Composition = Vec<(u64, Vec<u64>)>;
+    let wc = spec.wc_size as usize;
+    let compositions = |seats: &[u64]| -> Vec<Composition> {
+        let wcs = seats.len() / wc;
+        let contents: Vec<Vec<u64>> = (0..wcs)
+            .map(|w| {
+                let mut members = seats[w * wc..(w + 1) * wc].to_vec();
+                members.sort_unstable();
+                members
+            })
+            .collect();
+        golomb_ring(wcs as u64, &spec.ring_offsets)
+            .into_iter()
+            .map(|kwc| {
+                let mut record: Composition = kwc
+                    .iter()
+                    .map(|w| (*w, contents[*w as usize].clone()))
+                    .collect();
+                record.sort_unstable();
+                record
+            })
+            .collect()
+    };
+    // The KWC led by WC w is new or changed when its record differs.
+    let changed = |before: &[Composition], after: &[Composition]| -> u64 {
+        after
+            .iter()
+            .enumerate()
+            .filter(|(w, kwc)| before.get(*w) != Some(*kwc))
+            .count() as u64
+    };
+    // Deterministic positions from a fixed linear congruential sequence: this check is about
+    // counting compositions, not about randomness.
+    let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
+    let mut next = |bound: u64| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 33) % bound
+    };
+    let mut seats: Vec<u64> = (0..start_ids).collect();
+    let (mut inserted, mut removed) = (0u64, 0u64);
+    let mut before = compositions(&seats);
+    for new_id in start_ids..start_ids + events {
+        // Inside-out Fisher–Yates insertion.
+        let j = next(seats.len() as u64 + 1) as usize;
+        if j == seats.len() {
+            seats.push(new_id);
+        } else {
+            let displaced = seats[j];
+            seats[j] = new_id;
+            seats.push(displaced);
+        }
+        let after = compositions(&seats);
+        inserted += changed(&before, &after);
+        before = after;
+    }
+    for _ in 0..events {
+        // Swap-with-last removal.
+        let j = next(seats.len() as u64) as usize;
+        let last = seats.len() - 1;
+        seats.swap(j, last);
+        seats.pop();
+        let after = compositions(&seats);
+        removed += changed(&before, &after);
+        before = after;
+    }
+    (
+        inserted as f64 / events as f64,
+        removed as f64 / events as f64,
+    )
+}
+
+fn allocation_composition_check(config: &Config) -> Result<Check> {
+    let spec = KwcSpec::forty_node(config);
+    // 2,000 IDs (200 WCs); 1,000 insertions then 1,000 removals.
+    let (insertion, removal) = simulate_allocation_compositions(&spec, 2_000, 1_000);
+    let mut check = Check::relative(
+        "B",
+        "B-allocation-compositions",
+        "adopted allocation simulated seat by seat (200 WCs, 1,000 insertions then 1,000 removals): compositions changed per insertion vs (1+s) + (1+d_max)/wc_size (the removal rate (1+s) + d_max/wc_size must agree too)",
+        compositions_per_insertion(&spec),
+        insertion,
+        0.02,
+    );
+    check.passed = check.passed
+        && (removal - compositions_per_removal(&spec)).abs()
+            <= 0.02 * compositions_per_removal(&spec);
+    Ok(check)
+}
+
+fn one_seat_entry_check() -> Result<Check> {
+    // Reference: for an increasing state of a single pool under the binomial model, an
+    // entry needs t − 1 attacker seats, an honest seat replaced and an attacker newcomer:
+    // P(X = t − 1) · (n − t + 1)/n · p. Computed here from a separate distribution.
+    let config = Config::default();
+    let spec = KwcSpec::forty_node(&config);
+    let mut failures = 0;
+    let mut rows = 0;
+    for p in [ratio(1, 10), ratio(1, 4), ratio(2, 5)] {
+        rows += 1;
+        let t = spec.unregistered_min;
+        let n = spec.total_seats();
+        let d = ExactDistribution::new(n, &SeatModel::Binomial(p.clone()))?;
+        let reference = d.pmf(t - 1) * integer(n - t + 1) / integer(n) * &p;
+        let value = one_seat_entry_probability(&spec, MinerKind::Unregistered, KwcState::Sign, &p)?;
+        failures += u64::from(value != reference);
+    }
+    Ok(Check::all_rows(
+        "B",
+        "B-one-seat-entry",
+        "one-seat entry probability equals P(X = t-1)(n-t+1)/n · p exactly for the unregistered quorum",
+        failures,
+        rows,
+    ))
 }
 
 fn dynamic_programming_check(config: &Config) -> Result<Check> {
@@ -834,12 +1116,7 @@ fn partition_frequencies(
     replicates: u64,
     cases: &[(MinerKind, KwcState)],
 ) -> Vec<RunningStats> {
-    let offsets: Vec<u64> = if spec.subordinate_wcs == 3 {
-        vec![1, 4, 6]
-    } else {
-        vec![1, 3]
-    };
-    let ring = golomb_ring(wcs, &offsets);
+    let ring = golomb_ring(wcs, &spec.ring_offsets);
     let population = (spec.wc_size * wcs) as usize;
     let mut ids: Vec<bool> = (0..population).map(|i| (i as u64) < attackers).collect();
     let mut rng = rng_stream(seed, &format!("B-partition-{}-{attackers}", spec.label));
@@ -906,7 +1183,7 @@ fn partition_monte_carlo_checks(config: &Config) -> Result<Vec<Check>> {
                 "B",
                 &format!("B-mc-partition-{}-{}-p{p_f}", kind.label(), state_name(*state)),
                 &format!(
-                    "random partitions of {population} IDs into WCs on the proposed ring: fraction of KWCs in {} ({}) vs exact hypergeometric",
+                    "random partitions of {population} IDs into WCs on the configured ring: fraction of KWCs in {} ({}) vs exact hypergeometric",
                     state.label(),
                     kind.label()
                 ),
@@ -1002,12 +1279,64 @@ mod tests {
         assert!((summary.at_least_one_independence - (1.0 - (-0.1f64).exp())).abs() < 1e-6);
     }
 
+    fn inputs(ban_rate: f64, deactivation_cycles: f64) -> CompositionInputs {
+        CompositionInputs {
+            initial_kwcs: 100_000,
+            horizon_years: 10.0,
+            issuance_per_year: 1_051_200.0,
+            ban_rate,
+            deactivation_cycles,
+        }
+    }
+
     #[test]
-    fn composition_count_without_bans_adds_one_kwc_per_ten_new_ids() {
-        let count = composition_count(100_000, 10.0, 1_051_200.0, 10, 3, 0.0);
+    fn adopted_allocation_forms_4_7_compositions_per_insertion() {
+        // Reference: (1 + 3) + (1 + 6)/10 and (1 + 3) + 6/10 by hand.
+        assert!((compositions_per_insertion(&spec()) - 4.7).abs() < 1e-12);
+        assert!((compositions_per_removal(&spec()) - 4.6).abs() < 1e-12);
+        let count = composition_count(&spec(), &inputs(0.0, 0.0));
+        assert!((count - (100_000.0 + 10_512_000.0 * 4.7)).abs() < 1e-3);
+        assert!((count / composition_count_v02(&spec(), &inputs(0.0, 0.0)) - 43.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn v02_count_adds_one_kwc_per_ten_new_ids_and_ignores_deactivation() {
+        let count = composition_count_v02(&spec(), &inputs(0.0, 4.0));
         assert!((count - (100_000.0 + 1_051_200.0)).abs() < 1e-6);
-        let with_bans = composition_count(100_000, 10.0, 1_051_200.0, 10, 3, 0.01);
-        assert!(with_bans > count);
+        assert!(composition_count_v02(&spec(), &inputs(0.01, 0.0)) > count);
+    }
+
+    #[test]
+    fn deactivation_cycles_add_insertion_and_removal_compositions() {
+        let base = composition_count(&spec(), &inputs(0.0, 0.0));
+        let cycled = composition_count(&spec(), &inputs(0.0, 1.0));
+        let id_years = inputs(0.0, 1.0).id_years(10);
+        assert!((id_years - (10.0 * 100_000.0 * 10.0 + 1_051_200.0 * 50.0)).abs() < 1e-3);
+        assert!((cycled - base - 9.3 * id_years).abs() < 1e-2);
+    }
+
+    #[test]
+    fn one_seat_changes_enter_rare_states_less_often_than_fresh_draws() {
+        let p = ratio(1, 4);
+        for kind in KINDS {
+            let q = state_probability(
+                &spec(),
+                kind,
+                KwcState::Sign,
+                &SeatModel::Binomial(p.clone()),
+            )
+            .unwrap();
+            let e = one_seat_entry_probability(&spec(), kind, KwcState::Sign, &p).unwrap();
+            let r = to_f64(&(e / q));
+            assert!(r > 0.1 && r < 1.0, "{kind:?}: {r}");
+        }
+    }
+
+    #[test]
+    fn simulated_allocation_matches_the_composition_rates() {
+        let (insertion, removal) = simulate_allocation_compositions(&spec(), 2_000, 1_000);
+        assert!((insertion - 4.7).abs() < 0.1, "{insertion}");
+        assert!((removal - 4.6).abs() < 0.1, "{removal}");
     }
 
     #[test]

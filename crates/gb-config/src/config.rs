@@ -158,11 +158,46 @@ impl Config {
             self.issuance.min_attack_time_floor_years.value > 0.0,
             "issuance.min_attack_time_floor_years must be positive",
         );
-        let approval = self.cac.approval_threshold.value;
         require(
             problems,
-            approval.denominator > 0 && approval.numerator <= approval.denominator,
-            "cac.approval_threshold must be a fraction between 0 and 1",
+            self.cac.approval_threshold.value.is_proper(),
+            "cac.approval_threshold must be a fraction in (0, 1]",
+        );
+        let k = self.issuance.cap_safety_factor.value;
+        require(
+            problems,
+            k.numerator > 0 && k.denominator > 0,
+            "issuance.cap_safety_factor must be positive",
+        );
+        require(
+            problems,
+            self.issuance
+                .cap_checkpoint_interval_fraction_of_t_min
+                .value
+                > 0.0,
+            "issuance.cap_checkpoint_interval_fraction_of_t_min must be positive",
+        );
+        require(
+            problems,
+            self.issuance.retarget_window_blocks.value > 1,
+            "issuance.retarget_window_blocks must exceed 1",
+        );
+        require(
+            problems,
+            self.issuance.retarget_clamp_factor.value > 1.0,
+            "issuance.retarget_clamp_factor must exceed 1",
+        );
+        check_offsets(
+            problems,
+            "witness.ring_offsets",
+            &self.witness.ring_offsets.value,
+            subs,
+        );
+        check_offsets(
+            problems,
+            "witness.ring_offsets_30_node",
+            &self.witness.ring_offsets_30_node.value,
+            2,
         );
         require(
             problems,
@@ -235,10 +270,19 @@ impl Config {
         );
         check_fractions(
             problems,
-            "witness.ban_replacement_rates_per_year",
-            &a.witness.ban_replacement_rates_per_year,
+            "witness.ban_rates_per_year",
+            &a.witness.ban_rates_per_year,
             true,
             true,
+        );
+        require(
+            problems,
+            !a.witness.deactivation_cycles_per_id_per_year.is_empty()
+                && a.witness
+                    .deactivation_cycles_per_id_per_year
+                    .iter()
+                    .all(|c| c.is_finite() && *c >= 0.0),
+            "witness.deactivation_cycles_per_id_per_year must be non-negative",
         );
         check_fractions(
             problems,
@@ -259,8 +303,8 @@ impl Config {
             a.cac
                 .committee_sizes
                 .iter()
-                .all(|n| *n > 0 && *n < a.cac.mining_population),
-            "CAC committee sizes must be positive and smaller than the mining population",
+                .all(|n| *n > 0 && *n < a.cac.active_population),
+            "CAC committee sizes must be positive and smaller than the active population",
         );
         require(
             problems,
@@ -269,14 +313,11 @@ impl Config {
         );
         require(
             problems,
-            a.hopping.clamp_factor > 1.0,
-            "hopping.clamp_factor must exceed 1",
+            !a.hopping.attacker_ratios.is_empty()
+                && a.hopping.attacker_ratios.iter().all(|m| *m > 0.0),
+            "hopping.attacker_ratios must be positive",
         );
-        require(
-            problems,
-            a.hopping.window_blocks.iter().all(|k| *k > 1),
-            "hopping.window_blocks must exceed 1",
-        );
+        self.validate_quorum_grid(problems);
         require(
             problems,
             a.ties.competing_miners.iter().all(|n| *n > 1),
@@ -286,6 +327,50 @@ impl Config {
             problems,
             self.run.monte_carlo.tolerance_standard_errors > 0.0,
             "run.monte_carlo.tolerance_standard_errors must be positive",
+        );
+        require(
+            problems,
+            self.run.monte_carlo.committee_population > 100
+                && self.run.monte_carlo.lottery_population > 100,
+            "run.monte_carlo committee and lottery populations must exceed 100, the largest simulated committee",
+        );
+    }
+
+    fn validate_quorum_grid(&self, problems: &mut Vec<String>) {
+        let g = &self.analytic.quorum_tradeoff;
+        let all_quorums = g
+            .quorum_fractions
+            .iter()
+            .chain(&g.powit_quorum_fractions)
+            .chain(&g.cac_quorum_fractions)
+            .chain(std::iter::once(&g.decision_quorum));
+        let mut valid = true;
+        for q in all_quorums {
+            valid &= q.is_proper() && q.exceeds_half();
+        }
+        require(
+            problems,
+            valid,
+            "quorum_tradeoff fractions must lie above 1/2 and at most 1 (a quorum at or below one half lets two disjoint groups approve conflicting decisions)",
+        );
+        require(
+            problems,
+            !g.quorum_fractions.is_empty()
+                && !g.powit_quorum_fractions.is_empty()
+                && !g.cac_quorum_fractions.is_empty(),
+            "quorum_tradeoff fraction lists must not be empty",
+        );
+        check_fractions(
+            problems,
+            "quorum_tradeoff.attacker_fractions",
+            &g.attacker_fractions,
+            false,
+            false,
+        );
+        require(
+            problems,
+            !g.kwc_counts.is_empty() && g.kwc_counts.iter().all(|w| *w > 0),
+            "quorum_tradeoff.kwc_counts must be positive",
         );
     }
 
@@ -326,6 +411,20 @@ fn require(problems: &mut Vec<String>, condition: bool, message: &str) {
     if !condition {
         problems.push(message.to_string());
     }
+}
+
+fn check_offsets(problems: &mut Vec<String>, name: &str, offsets: &[u32], expected: u32) {
+    let mut sorted = offsets.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let valid = sorted.len() == offsets.len()
+        && offsets.len() as u64 == u64::from(expected)
+        && offsets.iter().all(|o| *o > 0);
+    require(
+        problems,
+        valid,
+        &format!("{name} must list {expected} distinct positive offsets"),
+    );
 }
 
 fn check_fractions(
@@ -420,6 +519,7 @@ mod tests {
     fn partial_override_changes_only_the_named_value() {
         let config = Config::from_toml_str("[genesis]\nids.value = 2000000\n").unwrap();
         assert_eq!(config.genesis.ids.value, 2_000_000);
+        assert_eq!(config.issuance.cap_safety_factor.value.numerator, 7);
         assert_eq!(config.genesis.ids.status, Status::D);
         assert_eq!(config.cac.size.value, 600);
     }
@@ -449,6 +549,30 @@ mod tests {
         let error =
             Config::from_toml_str("[quorum]\nregistered_leader_min.value = 11\n").unwrap_err();
         assert!(matches!(error, ConfigError::Invalid(_)), "{error}");
+    }
+
+    #[test]
+    fn quorum_fractions_at_or_below_one_half_are_rejected() {
+        let error = Config::from_toml_str(
+            "[analytic.quorum_tradeoff]\nquorum_fractions = [{ numerator = 1, denominator = 2 }]\n",
+        )
+        .unwrap_err();
+        assert!(matches!(error, ConfigError::Invalid(_)), "{error}");
+        assert!(
+            Config::from_toml_str(
+                "[analytic.quorum_tradeoff]\nquorum_fractions = [{ numerator = 51, denominator = 100 }]\n"
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn ring_offsets_must_match_the_kwc_layout() {
+        let error = Config::from_toml_str("[witness]\nring_offsets.value = [1, 4]\n").unwrap_err();
+        assert!(matches!(error, ConfigError::Invalid(_)), "{error}");
+        let repeated =
+            Config::from_toml_str("[witness]\nring_offsets.value = [1, 4, 4]\n").unwrap_err();
+        assert!(matches!(repeated, ConfigError::Invalid(_)), "{repeated}");
     }
 
     #[test]

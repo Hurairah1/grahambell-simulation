@@ -16,7 +16,7 @@ fn spec_markdown() -> String {
 #[test]
 fn spec_section_2_table_is_found() {
     let rows = parse_spec_section_2(&spec_markdown());
-    assert!(rows.len() >= 32, "only {} rows parsed", rows.len());
+    assert!(rows.len() >= 38, "only {} rows parsed", rows.len());
 }
 
 #[test]

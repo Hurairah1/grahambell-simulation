@@ -8,19 +8,24 @@
 #
 # To run with different values, write a small file containing only the keys you change, e.g.
 #   [genesis]
-#   ids.value = 3000000
+#   ids.value = 5000000
 # and pass it with `gb analytic --config my.toml`. Status tags cannot be changed.
 
 # ---------------------------------------------------------------- SPEC §2: hash pacing
 [pacing]
 hashes_per_second = { value = 1.0, status = "D" }
 
-# ---------------------------------------------------------------- SPEC §2, §3.5, §3.7, §3.9: PoW-ID issuance
+# ---------------------------------------------------------------- SPEC §2, §3.5, §3.7–§3.9: PoW-ID issuance
 [issuance]
 pow_id_target_interval_s = { value = 30.0, status = "D" }
 rate_mode = { value = "fixed", status = "P", sweep = { values = ["fixed", "adaptive"], note = "fixed is decided; adaptive is the proposed variant (SPEC §3.9)" } }
+difficulty_variant = { value = "count_based", status = "D", sweep = { values = ["count_based", "bitcoin_retarget"], note = "Variant A (Bitcoin-style retarget) is the comparison (SPEC §3.8)" } }
+retarget_window_blocks = { value = 144, status = "D" }
+retarget_clamp_factor = { value = 4.0, status = "D" }
+count_based_correction = { status = "P" }
 min_attack_time_floor_years = { value = 2.0, status = "P", sweep = { range = [1.0, 10.0] } }
-cap_checkpoint_interval_fraction_of_t_min = { status = "O", sweep = { values = [0.25, 0.5, 1.0] } }
+cap_checkpoint_interval_fraction_of_t_min = { value = 1.0, status = "D", sweep = { values = [0.25, 0.5, 1.0] } }
+cap_safety_factor = { value = { numerator = 7, denominator = 6 }, status = "D" }
 confirmation_depth_blocks = { value = 6, status = "O", sweep = { range = [3, 12] } }
 start_rule = { value = "a", status = "D", sweep = { values = ["a", "b"], note = "rule (b) is the rejected alternative, kept for S13" } }
 same_height_tie_break = { value = "lower_block_hash", status = "P", sweep = { values = ["lower_block_hash", "first_seen"] } }
@@ -29,11 +34,14 @@ same_height_tie_break = { value = "lower_block_hash", status = "P", sweep = { va
 [transactions]
 pow_tx_interval_s = { value = 10.0, status = "O", sweep = { range = [1.0, 10.0] } }
 
-# ---------------------------------------------------------------- SPEC §2, §4.1: Witness Chains
+# ---------------------------------------------------------------- SPEC §2, §4.1, §4.2: Witness Chains and allocation
 [witness]
 wc_size = { value = 10, status = "D" }
 subordinate_wcs_per_kwc = { value = 3, status = "D", sweep = { values = [3, 2], note = "1 + 2 (30 nodes) for comparison" } }
 kwc_count_rule = { value = "equals_wc_count", status = "D" }
+ring_offsets = { value = [1, 4, 6], status = "D" }
+ring_offsets_30_node = { value = [1, 3], status = "D" }
+allocation_beacon_delay_blocks = { value = 6, status = "O", sweep = { values = [3, 6, 12] } }
 watched_registered_per_node = { value = 800, status = "D" }
 watched_unregistered_per_node = { value = 200, status = "D" }
 
@@ -75,12 +83,13 @@ peer_bootstrap_count = { value = 8, status = "D", sweep = { range = [4, 8] } }
 size = { value = 600, status = "D", sweep = { range = [100, 1000], note = "100–1,000 for comparison" } }
 membership_policy = { value = "first_in_first_out", status = "D" }
 join_every_n_tx_blocks = { value = 10, status = "D" }
+seat_selection = { value = "lottery", status = "D", sweep = { values = ["lottery", "tenth_block_miner"], note = "the v0.2 rule (miner of every 10th PoW-Tx block) is the comparison" } }
+lottery_beacon_offset_blocks = { value = 3, status = "O", sweep = { values = [1, 3, 6, 12] } }
 approval_threshold = { value = { numerator = 2, denominator = 3 }, status = "D" }
-seat_rule = { value = "next_non_member", status = "P", sweep = { values = ["next_non_member", "allow_duplicates"] } }
 
 # ---------------------------------------------------------------- SPEC §2: genesis
 [genesis]
-ids = { value = 2100000, status = "D", sweep = { values = [500000, 1000000, 2000000, 2100000, 3000000] } }
+ids = { value = 2900000, status = "D", sweep = { values = [1000000, 2100000, 2900000, 5000000, 10000000] } }
 distribution = { value = "kyc_one_per_verified_person", status = "D" }
 secretly_controlled_fraction = { value = 0.0, status = "O", sweep = { range = [0.0, 0.2] } }
 
@@ -106,7 +115,7 @@ seconds_per_year = 31536000
 
 # ================================================================ M1 analysis grids
 [analytic.time_to_threshold]
-genesis_ids = [500000, 1000000, 2000000, 2100000, 3000000]
+genesis_ids = [1000000, 2100000, 2900000, 5000000, 10000000]
 attacker_shares = [0.05, 0.1, 0.2, 0.25, 0.3, 0.34, 0.4, 0.52, 0.55, 0.6, 0.75, 1.0]
 thresholds = [0.33, 0.51, 0.67]
 online_fractions = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -121,13 +130,14 @@ trajectory_step_years = 0.5
 attacker_fractions = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.33, 0.4]
 kwc_counts = [10000, 100000, 1000000]
 composition_horizon_years = 10.0
-composition_initial_kwc_counts = [10000, 100000, 210000, 1000000]
-ban_replacement_rates_per_year = [0.0, 0.01, 0.05]
+composition_initial_kwc_counts = [10000, 100000, 290000, 1000000]
+ban_rates_per_year = [0.0, 0.01, 0.05]
+deactivation_cycles_per_id_per_year = [0.0, 1.0, 4.0]
 
 [analytic.cac]
 committee_sizes = [30, 100, 600, 1000]
 attacker_fractions = [0.1, 0.2, 0.25, 0.3, 0.33, 0.4]
-mining_population = 2100000
+active_population = 2900000
 honest_mining_fractions = [0.5, 0.7, 1.0]
 
 [analytic.restart]
@@ -136,14 +146,32 @@ restart_costs_s = [60.0, 300.0, 600.0]
 keep_windows_s = [3600, 86400, 259200]
 
 [analytic.hopping]
-window_blocks = [144, 2016]
+# The Variant A window K and clamp are protocol parameters (issuance.retarget_*).
 attacker_ratios = [0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0]
-clamp_factor = 4.0
 
 [analytic.ties]
 competing_miners = [1000000, 5000000]
 intervals_s = [10.0, 30.0, 60.0]
 max_tie_size = 4
+
+[analytic.quorum_tradeoff]
+# Quorum fractions must exceed 1/2. The CAC part uses cac.size and analytic.cac.active_population.
+quorum_fractions = [
+    { numerator = 51, denominator = 100 },
+    { numerator = 55, denominator = 100 },
+    { numerator = 60, denominator = 100 },
+    { numerator = 2, denominator = 3 },
+    { numerator = 75, denominator = 100 },
+]
+powit_quorum_fractions = [
+    { numerator = 51, denominator = 100 },
+    { numerator = 55, denominator = 100 },
+    { numerator = 60, denominator = 100 },
+]
+decision_quorum = { numerator = 2, denominator = 3 }
+cac_quorum_fractions = [{ numerator = 51, denominator = 100 }, { numerator = 2, denominator = 3 }]
+attacker_fractions = [0.05, 0.1, 0.2, 0.25, 0.3, 0.33, 0.4, 0.45, 0.49]
+kwc_counts = [100000, 1000000]
 
 # ================================================================ Run settings
 [run]
@@ -156,6 +184,7 @@ partition_replicates = 2000
 partition_wcs = 1000
 committee_refreshes = 4000000
 committee_population = 10000
+lottery_population = 100000
 restart_successes = 20000
 per_round_trials = 20000
 hopping_replicates = 4000

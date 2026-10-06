@@ -6,10 +6,16 @@
 
 use crate::charts::{compact_number, short_count, superscript};
 use gb_analytic::M1Results;
-use gb_analytic::time_threshold::CapRow;
+use gb_analytic::cac::{CommitteeModel, OddsRow};
+use gb_analytic::quorum_tradeoff::{POOL_LAYOUT, QuorumRow, REGISTERED_LAYOUT};
+use gb_analytic::restart::REALISTIC_COST;
+use gb_analytic::time_threshold::{CAP_CONFIGURED, CAP_WITH_SAFETY_FACTOR, CapRow};
 use gb_analytic::validation::Check;
 use gb_analytic::witness::KwcState;
 use gb_config::Config;
+
+/// The worst-case disclosure required at the top of section 1 (architect, 2026-10-06).
+pub const DISCLOSURE: &str = "All M1 results assume the attacker's IDs are online 100% of the time while honest IDs are online a fraction f of the time. This is a deliberate worst case; M3 adds realistic outages for both sides.";
 
 /// Provenance printed at the top of the summary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +43,7 @@ pub fn render(config: &Config, results: &M1Results, provenance: &Provenance) -> 
     restart(&mut out, results);
     hopping(&mut out, results);
     ties(&mut out, results);
+    quorum_tradeoff(&mut out, results);
     cross_checks(&mut out, results);
     closing(&mut out);
     out
@@ -67,7 +74,7 @@ fn strings(items: &[&str]) -> Vec<String> {
 }
 
 /// Three significant digits in fixed notation, for example `97.1`, `1.98`, `0.990`.
-fn sig3(value: f64) -> String {
+pub(crate) fn sig3(value: f64) -> String {
     if value == 0.0 || !value.is_finite() {
         return compact_number(value);
     }
@@ -87,7 +94,7 @@ fn years(value: Option<f64>) -> String {
 
 /// A computed share as a percentage with three significant digits. Values just below 100%
 /// are written `> 99.9%` so they are not mistaken for certainty.
-fn pct(value: f64) -> String {
+pub(crate) fn pct(value: f64) -> String {
     if (0.9995..1.0).contains(&value) {
         "> 99.9%".to_string()
     } else {
@@ -96,7 +103,7 @@ fn pct(value: f64) -> String {
 }
 
 /// An input share from the configuration grid, for example `5%` or `33%`.
-fn share(value: f64) -> String {
+pub(crate) fn share(value: f64) -> String {
     format!("{}%", compact_number(100.0 * value))
 }
 
@@ -106,8 +113,14 @@ fn pct1(value: f64) -> String {
 }
 
 /// Probability from an exact scientific string: a percentage when at least 1%, otherwise
-/// `m.mm × 10ⁿ`.
-fn prob(scientific: &str) -> String {
+/// `m.mm × 10ⁿ`. Values that round to 100% are written `> 99.9%`: the tables keep six
+/// significant digits, so they cannot show how far below 1 such a value is.
+pub(crate) fn prob(scientific: &str) -> String {
+    prob_digits(scientific, 3)
+}
+
+/// [`prob`] with `digits` significant digits.
+fn prob_digits(scientific: &str, digits: usize) -> String {
     let Some((mantissa, exponent)) = scientific.split_once('e') else {
         return scientific.to_string();
     };
@@ -115,10 +128,27 @@ fn prob(scientific: &str) -> String {
         return scientific.to_string();
     };
     if e >= -2 {
-        pct(m * libm::pow(10.0, e as f64))
+        let value = m * libm::pow(10.0, e as f64);
+        if value >= 0.9995 {
+            return "> 99.9%".to_string();
+        }
+        let percent = 100.0 * value;
+        let magnitude = libm::floor(libm::log10(percent.abs())) as i64;
+        let decimals = (digits as i64 - 1 - magnitude).max(0) as usize;
+        format!("{percent:.decimals$}%")
     } else {
-        format!("{m:.2} × 10{}", superscript(e))
+        let decimals = digits.saturating_sub(1);
+        format!("{m:.decimals$} × 10{}", superscript(e))
     }
+}
+
+/// Two probabilities printed with enough significant digits (at most six, the precision of
+/// the tables) that they do not look equal when they differ.
+fn prob_pair(a: &str, b: &str) -> (String, String) {
+    (3..=6)
+        .map(|digits| (prob_digits(a, digits), prob_digits(b, digits)))
+        .find(|(x, y)| x != y)
+        .unwrap_or_else(|| (prob(a), prob(b)))
 }
 
 fn distinct(values: impl Iterator<Item = f64>) -> Vec<f64> {
@@ -159,7 +189,7 @@ fn header(out: &mut String, config: &Config, provenance: &Provenance) {
     blank(out);
     line(
         out,
-        "These results are exact calculations: closed-form formulas and exact probabilities. They are not a simulation of the network. Seeded Monte Carlo runs appear only as cross-checks of the formulas (section 10). Every number below comes from a CSV table in this directory, and every modelling assumption is listed in `docs/ASSUMPTIONS.md`.",
+        "These results are exact calculations: closed-form formulas and exact probabilities. They are not a simulation of the network. Seeded Monte Carlo runs appear only as cross-checks of the formulas (section 11). Every number below comes from a CSV table in this directory, and every modelling assumption is listed in `docs/ASSUMPTIONS.md`.",
     );
     blank(out);
     line(
@@ -176,6 +206,8 @@ fn header(out: &mut String, config: &Config, provenance: &Provenance) {
 
 fn honest_majority(out: &mut String, config: &Config, results: &M1Results) {
     line(out, "## 1. Attackers that win less than half of new IDs");
+    blank(out);
+    line(out, &format!("> {DISCLOSURE}"));
     blank(out);
     line(
         out,
@@ -386,7 +418,7 @@ fn worst_case(out: &mut String, config: &Config, results: &M1Results) {
     blank(out);
     line(
         out,
-        "Everything in this section is a **worst-case bound**. It assumes the attacker wins 100% of new IDs and every honest ID stays online. The exact time is (T/(1−T)) × G/R, the SPEC v0.2 C2 floor.",
+        "Everything in this section is a **worst-case bound**. It assumes the attacker wins 100% of new IDs and every honest ID stays online. The exact time is (T/(1−T)) × G/R, the SPEC §0 C2 floor.",
     );
     blank(out);
     let rows = &results.a.thresholds;
@@ -487,7 +519,7 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
     line(
         out,
         &format!(
-            "**Adaptive cap R ≤ registered IDs / T_min (SPEC §3.9): time for a 100%-capture attacker to reach {}, in units of T_min** (table `A4_adaptive_cap.csv`, chart `A4_adaptive_cap.png`). The \"worst start\" column is the fastest time over all possible start moments relative to the checkpoint schedule.",
+            "**Adaptive cap R ≤ registered IDs / (k × T_min) (SPEC §3.9, an optional variant; the fixed 30 s rate stays the default): time for a 100%-capture attacker to reach {}, in units of T_min** (table `A4_adaptive_cap.csv`, chart `A4_adaptive_cap.png`). \"Worst start\" is the fastest time over all possible start moments relative to the public checkpoint schedule.",
             share(floor_t)
         ),
     );
@@ -495,11 +527,17 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
     let model_rows = |model: &str| -> Vec<&CapRow> {
         rows.iter().copied().filter(|r| r.model == model).collect()
     };
+    let at_interval = |model: &str, fraction: Option<f64>| {
+        model_rows(model)
+            .into_iter()
+            .find(|w| w.checkpoint_interval_fraction_of_t_min == fraction)
+    };
     let mut body = Vec::new();
     for r in model_rows("frozen") {
         body.push(vec![
             "cap frozen at attack start".to_string(),
             years(r.time_in_t_min),
+            "—".to_string(),
             "—".to_string(),
         ]);
     }
@@ -508,13 +546,13 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
             "recalculated continuously".to_string(),
             years(r.time_in_t_min),
             years(r.time_in_t_min),
+            "—".to_string(),
         ]);
     }
     for aligned in model_rows("checkpoint aligned") {
         let fraction = aligned.checkpoint_interval_fraction_of_t_min;
-        let worst = model_rows("checkpoint worst phase")
-            .into_iter()
-            .find(|w| w.checkpoint_interval_fraction_of_t_min == fraction);
+        let worst = at_interval("checkpoint worst phase", fraction);
+        let with_k = at_interval(CAP_WITH_SAFETY_FACTOR, fraction);
         body.push(vec![
             format!(
                 "checkpoint every {} T_min",
@@ -522,11 +560,23 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
             ),
             years(aligned.time_in_t_min),
             worst.map_or("—".to_string(), |w| years(w.time_in_t_min)),
+            with_k.map_or("—".to_string(), |w| {
+                format!(
+                    "{} (k = {:.4})",
+                    years(w.time_in_t_min),
+                    w.safety_factor.unwrap_or(f64::NAN)
+                )
+            }),
         ]);
     }
     table(
         out,
-        &strings(&["cap recalculation", "start at a checkpoint", "worst start"]),
+        &strings(&[
+            "cap recalculation",
+            "start at a checkpoint, k = 1",
+            "worst start, k = 1",
+            "worst start, with safety factor k",
+        ]),
         &body,
     );
     let holds: Vec<String> = body
@@ -543,7 +593,7 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
     line(
         out,
         &format!(
-            "Times at or above 1.00 meet the floor. The floor holds at every start moment only for: {holds_text}. To hold it at the worst start, the cap needs a safety factor k, as in R ≤ registered IDs / (k × T_min) (table `A4_safety_factor.csv`):"
+            "Times at or above 1.00 meet the floor. Without a safety factor (k = 1) the floor holds at every start moment only for: {holds_text}. The safety factor k for each checkpoint interval (table `A4_safety_factor.csv`):"
         ),
     );
     blank(out);
@@ -565,14 +615,26 @@ fn adaptive_cap(out: &mut String, results: &M1Results) {
         .collect();
     table(
         out,
-        &strings(&["cap", "worst time / T_min without k", "safety factor k"]),
+        &strings(&["cap", "worst time / T_min with k = 1", "safety factor k"]),
         &safety,
     );
-    line(
-        out,
-        "A factor k above 1 tightens the cap; below 1, the floor already holds with room to spare.",
-    );
-    blank(out);
+    if let Some(configured) = model_rows(CAP_CONFIGURED).first() {
+        line(
+            out,
+            &format!(
+                "**SPEC v0.3 default:** k = {:.4} with checkpoints every {} T_min. Its worst-start time is {} T_min, so a 100%-capture attacker cannot reach {} in less than T_min at any start phase (cross-checks `A-cap-configured-floor` and `A-cap-configured-vs-grid`). A factor k above 1 tightens the cap; below 1, the floor already holds with room to spare.",
+                configured.safety_factor.unwrap_or(f64::NAN),
+                configured
+                    .checkpoint_interval_fraction_of_t_min
+                    .map_or("?".to_string(), compact_number),
+                configured
+                    .time_in_t_min
+                    .map_or("—".to_string(), |t| format!("{t:.3}")),
+                share(floor_t)
+            ),
+        );
+        blank(out);
+    }
 }
 
 fn honest_growth(out: &mut String, results: &M1Results) {
@@ -782,15 +844,24 @@ fn kwc_ten_year_table(out: &mut String, results: &M1Results) {
     let horizon = rows.first().map(|r| r.horizon_years).unwrap_or(10.0);
     let base: Vec<_> = rows
         .iter()
-        .filter(|r| r.initial_kwcs == 100_000 && r.ban_replacement_rate_per_year == 0.0)
+        .filter(|r| {
+            r.initial_kwcs == 100_000
+                && r.ban_rate_per_year == 0.0
+                && r.deactivation_cycles_per_id_per_year == 0.0
+        })
         .collect();
-    let compositions = base.first().map(|r| r.compositions).unwrap_or(0.0);
+    let Some(first) = base.first() else {
+        return;
+    };
+    let (compositions, v02) = (first.compositions, first.compositions_v02_comparison);
     line(
         out,
         &format!(
-            "**Expected number of KWC compositions in state (ii) over {} years** (SPEC §10 H6 refresh model: 100,000 KWCs at the start, one new KWC per 10 new IDs, no bans; every composition counted as an independent draw; {} compositions in total):",
+            "**Expected KWC compositions in state (ii) over {} years** (table `B4_kwc_compositions_10y.csv`; SPEC §10 H6 refresh model). Every composition counts as an independent draw. Under the adopted allocation (SPEC §4.2) each new ID changes one existing WC, so the 4 KWCs it sits in, and one new ID in 10 completes a WC whose KWC forms while 6 others relink: about 4.7 compositions per new ID. With 100,000 KWCs at the start, no bans and no deactivation, that is {} compositions, {} times the v0.2 count of one new KWC per 10 new IDs ({}), shown for comparison:",
             compact_number(horizon),
-            compact_number(compositions)
+            compact_number(compositions),
+            sig3(compositions / v02),
+            compact_number(v02)
         ),
     );
     blank(out);
@@ -798,39 +869,93 @@ fn kwc_ten_year_table(out: &mut String, results: &M1Results) {
     let body: Vec<Vec<String>> = fractions
         .iter()
         .map(|p| {
-            let get = |kind: &str| {
+            let get = |kind: &str, v02: bool| {
                 base.iter()
                     .find(|r| r.attacker_fraction == *p && r.miner_kind == kind)
                     .map_or("—".to_string(), |r| {
-                        count(&format!("{:e}", r.expected_sign_capable))
+                        let value = if v02 {
+                            r.expected_sign_capable_v02_comparison
+                        } else {
+                            r.expected_sign_capable
+                        };
+                        count(&format!("{value:e}"))
                     })
             };
-            vec![share(*p), get("registered"), get("unregistered")]
+            vec![
+                share(*p),
+                get("registered", false),
+                get("unregistered", false),
+                get("registered", true),
+                get("unregistered", true),
+            ]
         })
         .collect();
     table(
         out,
         &strings(&[
             "p",
-            "registered quorum",
-            "unregistered quorum (used by PoW-ID)",
+            "registered quorum (PoW-Tx)",
+            "unregistered quorum (PoW-ID)",
+            "registered, v0.2 count",
+            "unregistered, v0.2 count",
         ]),
         &body,
     );
-    let banned: Vec<_> = rows
-        .iter()
-        .filter(|r| r.initial_kwcs == 100_000 && r.ban_replacement_rate_per_year > 0.0)
-        .collect();
-    if let (Some(first), Some(last)) = (banned.first(), banned.last()) {
+    let ratio_at = |kind: &str| {
+        base.iter()
+            .find(|r| r.attacker_fraction == 0.25 && r.miner_kind == kind)
+            .map(|r| r.one_seat_entry_ratio)
+    };
+    if let (Some(registered), Some(unregistered)) =
+        (ratio_at("registered"), ratio_at("unregistered"))
+    {
         line(
             out,
             &format!(
-                "Ban replacements are a labelled sensitivity. Each one creates 4 new compositions. At {} and {} of IDs replaced per year, the composition count is {} and {} instead of {}, and the expected counts scale by the same factor.",
-                share(first.ban_replacement_rate_per_year),
-                share(last.ban_replacement_rate_per_year),
-                compact_number(first.compositions),
-                compact_number(last.compositions),
-                compact_number(compositions)
+                "Every allocation keeps each composition a uniformly random draw, so by linearity of expectation these counts hold whatever the correlation between compositions. But most consecutive compositions share all but one seat, so one KWC staying in state (ii) across several changes is counted several times. At p = 25% a one-seat change enters state (ii) with {} (registered) and {} (unregistered) times the probability of a fresh draw (column `one_seat_entry_ratio`). M4 measures the number of distinct episodes.",
+                sig3(registered),
+                sig3(unregistered)
+            ),
+        );
+        blank(out);
+    }
+    let sensitivity = |ban: f64, cycles: f64| {
+        rows.iter()
+            .find(|r| {
+                r.initial_kwcs == 100_000
+                    && r.ban_rate_per_year == ban
+                    && r.deactivation_cycles_per_id_per_year == cycles
+            })
+            .map(|r| r.compositions)
+    };
+    let bans = distinct(rows.iter().map(|r| r.ban_rate_per_year));
+    let cycles = distinct(rows.iter().map(|r| r.deactivation_cycles_per_id_per_year));
+    let mut parts = Vec::new();
+    for ban in bans.iter().filter(|b| **b > 0.0) {
+        if let Some(c) = sensitivity(*ban, 0.0) {
+            parts.push(format!(
+                "{} of registered IDs banned per year gives {} compositions",
+                share(*ban),
+                compact_number(c)
+            ));
+        }
+    }
+    for cycle in cycles.iter().filter(|c| **c > 0.0) {
+        if let Some(c) = sensitivity(0.0, *cycle) {
+            parts.push(format!(
+                "{} deactivation cycle{} per ID per year gives {}",
+                compact_number(*cycle),
+                if *cycle == 1.0 { "" } else { "s" },
+                compact_number(c)
+            ));
+        }
+    }
+    if !parts.is_empty() {
+        line(
+            out,
+            &format!(
+                "Sensitivities: {}. Expected counts scale by the same factor. Under SPEC v0.3 a deactivated ID vacates its seat and a re-activated ID is re-inserted, so household downtime changes compositions (about 9.3 per cycle); the cycle rates are illustrative until M3 provides downtime profiles.",
+                parts.join("; ")
             ),
         );
         blank(out);
@@ -926,20 +1051,54 @@ fn kwc_model_comparison(out: &mut String, results: &M1Results) {
     }
 }
 
+/// Label of the primary committee model: the lottery with attacker IDs spread through the list.
+fn primary_committee_model() -> &'static str {
+    CommitteeModel::LotterySpread {
+        population: 1,
+        attackers: 0,
+    }
+    .label()
+}
+
+/// Label of the block-layout sensitivity of the lottery.
+fn block_committee_model() -> &'static str {
+    CommitteeModel::LotteryBlock {
+        population: 1,
+        attackers: 0,
+    }
+    .label()
+}
+
+/// Hours as a readable duration, for example `40 min`, `5.2 h` or `3.1 days`.
+fn duration_hours(hours: Option<f64>) -> String {
+    match hours {
+        None => "never entered".to_string(),
+        Some(h) if h < 1.0 => format!("{} min", sig3(60.0 * h)),
+        Some(h) if h < 48.0 => format!("{} h", sig3(h)),
+        Some(h) if h < 24.0 * 730.0 => format!("{} days", sig3(h / 24.0)),
+        Some(h) => format!("{} years", sig3(h / (24.0 * 365.0))),
+    }
+}
+
 fn committee(out: &mut String, config: &Config, results: &M1Results) {
     line(out, "## 6. Chain Allocation Committee");
     blank(out);
-    line(
-        out,
-        "Tables `C1_cac_probabilities.csv`, `C2_cac_events_per_year.csv`; chart `C1_cac_probabilities.png`. An Allocation Committee Block needs ⌈2n/3⌉ approvals. The attacker can stall with n − ⌈2n/3⌉ + 1 seats and approve alone with ⌈2n/3⌉ seats. Under the [P] seat rule one ID holds at most one seat, so the attacker's seat count is hypergeometric over the mining IDs (default: all 2.1M IDs mine).",
-    );
-    blank(out);
-    let rows: Vec<_> = results
+    let primary = primary_committee_model();
+    let rows: Vec<&OddsRow> = results
         .c
         .odds
         .iter()
-        .filter(|r| r.mining_population.is_some() && r.honest_mining_fraction == 1.0)
+        .filter(|r| r.model == primary)
         .collect();
+    let active = rows.first().map_or(0, |r| r.population);
+    line(
+        out,
+        &format!(
+            "Tables `C1_cac_probabilities.csv`, `C2_cac_events_per_year.csv`; chart `C1_cac_probabilities.png`. Under SPEC v0.3 §4.3 a new member joins for every 10th PoW-Tx block by a lottery over the canonical active list ({} active IDs here); a draw that lands on a member moves to the next position. With the attacker's IDs spread through the list, its seat count is hypergeometric, so its expected committee share equals its share p of active IDs. Mining power plays no part. An Allocation Committee Block needs ⌈2n/3⌉ approvals; the attacker stalls with n − ⌈2n/3⌉ + 1 seats and approves alone with ⌈2n/3⌉.",
+            short_count(active)
+        ),
+    );
+    blank(out);
     let sizes = distinct(rows.iter().map(|r| r.committee_size as f64));
     let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
     let thresholds: Vec<Vec<String>> = sizes
@@ -959,7 +1118,10 @@ fn committee(out: &mut String, config: &Config, results: &M1Results) {
         &thresholds,
     );
     for (label, capture) in [("stall", false), ("hold two-thirds (approve alone)", true)] {
-        line(out, &format!("**Probability the attacker can {label}:**"));
+        line(
+            out,
+            &format!("**Probability the attacker can {label}** (lottery):"),
+        );
         blank(out);
         let mut headers = vec!["p".to_string()];
         headers.extend(sizes.iter().map(|n| format!("n = {}", compact_number(*n))));
@@ -980,49 +1142,30 @@ fn committee(out: &mut String, config: &Config, results: &M1Results) {
         table(out, &headers, &body);
     }
     committee_events(out, config, results);
-    committee_mining_sensitivity(out, results);
+    committee_sensitivities(out, config, results);
 }
 
 fn committee_events(out: &mut String, config: &Config, results: &M1Results) {
     let size = u64::from(config.cac.size.value);
+    let primary = primary_committee_model();
     let rows: Vec<_> = results
         .c
         .events
         .iter()
-        .filter(|r| {
-            r.committee_size == size
-                && r.honest_mining_fraction == 1.0
-                && r.model.starts_with("one seat")
-        })
+        .filter(|r| r.committee_size == size && r.model == primary)
         .collect();
-    if rows.is_empty() {
+    let Some(first) = rows.first() else {
         return;
-    }
-    let refreshes = rows.first().map(|r| r.refreshes_per_year).unwrap_or(0.0);
+    };
     line(
         out,
         &format!(
-            "**Events per year at n = {size}** ({} refreshes per year). The M1 brief's estimate assumes one independent composition per n refreshes. The exact count of entries into the state, under the same seat model, is shown next to it.",
-            compact_number(refreshes)
+            "**Stalls and captures over time at n = {size}** ({} refreshes per year, one every {} s). Primary measures: the share of time in each state and the exact number of entries into it per year; the mean episode length is the first divided by the second. Stalling is accepted for now (SPEC §4.3): allocation is deterministic, so a stalled committee delays the announcement of placements but cannot change them. The M1 brief's estimate (one independent composition per n refreshes) is the last column, for comparison only.",
+            compact_number(first.refreshes_per_year),
+            compact_number(first.seconds_per_refresh)
         ),
     );
     blank(out);
-    let time_share = |time_fraction: &str| time_fraction.parse::<f64>().unwrap_or(0.0);
-    let rare_more = rows
-        .iter()
-        .any(|r| time_share(&r.time_fraction) < 0.5 && r.ratio_exact_to_approximation > 1.0);
-    let common_fewer = rows
-        .iter()
-        .any(|r| time_share(&r.time_fraction) >= 0.5 && r.ratio_exact_to_approximation < 1.0);
-    if rare_more {
-        let mut text = "A sliding committee changes one seat at a time. Where the state is rare, the committee enters it more often than the estimate assumes (ratio above 1)".to_string();
-        if common_fewer {
-            text.push_str("; where it is in the state most of the time, it seldom leaves, so entries are fewer (ratio below 1)");
-        }
-        text.push('.');
-        line(out, &text);
-        blank(out);
-    }
     let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
     let body: Vec<Vec<String>> = fractions
         .iter()
@@ -1033,10 +1176,10 @@ fn committee_events(out: &mut String, config: &Config, results: &M1Results) {
                     vec![
                         share(*p),
                         r.state.to_string(),
-                        prob(&r.time_fraction),
-                        count(&r.events_per_year_independence_approximation),
-                        count(&r.onsets_per_year_exact),
-                        sig3(r.ratio_exact_to_approximation),
+                        prob(&r.share_of_time),
+                        count(&r.entries_per_year_exact),
+                        duration_hours(r.mean_episode_hours),
+                        count(&r.brief_estimate_events_per_year),
                     ]
                 })
         })
@@ -1047,37 +1190,79 @@ fn committee_events(out: &mut String, config: &Config, results: &M1Results) {
             "p",
             "state",
             "share of time in state",
-            "events/yr, brief's estimate",
-            "entries/yr, exact",
-            "exact ÷ estimate",
+            "entries per year (exact)",
+            "mean episode",
+            "brief's estimate, events/yr (comparison)",
         ]),
         &body,
     );
+    let time_share = |text: &str| text.parse::<f64>().unwrap_or(0.0);
+    let rare_more = rows
+        .iter()
+        .any(|r| time_share(&r.share_of_time) < 0.5 && r.ratio_exact_to_brief_estimate > 1.0);
+    let common_fewer = rows
+        .iter()
+        .any(|r| time_share(&r.share_of_time) >= 0.5 && r.ratio_exact_to_brief_estimate < 1.0);
+    if rare_more {
+        let mut text = "A sliding committee changes one seat at a time. Where a state is rare, the committee enters it more often than the brief's estimate assumes".to_string();
+        if common_fewer {
+            text.push_str("; where it is in the state most of the time, it seldom leaves, so entries are fewer");
+        }
+        text.push_str(
+            ". The mean-episode column shows how long the committee stays in a state once there.",
+        );
+        line(out, &text);
+        blank(out);
+    }
 }
 
-fn committee_mining_sensitivity(out: &mut String, results: &M1Results) {
-    let rows: Vec<_> = results
-        .c
-        .odds
-        .iter()
-        .filter(|r| r.mining_population.is_some())
-        .collect();
-    let mus = distinct(rows.iter().map(|r| r.honest_mining_fraction));
-    let low_mu = mus.iter().copied().fold(f64::INFINITY, f64::min);
-    let pick = |mu: f64| {
-        rows.iter().find(|r| {
-            r.committee_size == 600 && r.attacker_fraction == 0.25 && r.honest_mining_fraction == mu
+fn committee_sensitivities(out: &mut String, config: &Config, results: &M1Results) {
+    let size = u64::from(config.cac.size.value);
+    let find = |model: &str, mu: Option<f64>, p: f64| {
+        results.c.odds.iter().find(|r| {
+            r.model == model
+                && r.committee_size == size
+                && r.attacker_fraction == p
+                && r.honest_mining_fraction == mu
         })
     };
-    if let (Some(full), Some(low)) = (pick(1.0), pick(low_mu)) {
+    let primary = primary_committee_model();
+    if let (Some(spread), Some(block)) = (
+        find(primary, None, 0.3),
+        find(block_committee_model(), None, 0.3),
+    ) {
+        let (stall_spread, stall_block) = prob_pair(&spread.p_stall, &block.p_stall);
+        let (capture_spread, capture_block) = prob_pair(&spread.p_capture, &block.p_capture);
         line(
             out,
             &format!(
-                "**If fewer honest IDs mine.** Attacker IDs always mine. If only {} of honest IDs mine, an attacker holding 25% of active IDs holds {} of mining IDs. At n = 600 its chance of being able to stall rises from {} to {} (rows with honest mining fraction below 100%).",
+                "**Where the attacker's IDs sit in the list.** The canonical list is in registration order, so IDs won in a burst sit next to each other. If all of the attacker's IDs formed one block, a draw landing on a member would pass to a neighbour of the same type, and the seat count would be binomial instead of hypergeometric. At n = {size} and p = 30% the stall probability changes from {stall_spread} to {stall_block}, and the capture probability from {capture_spread} to {capture_block}.",
+            ),
+        );
+        blank(out);
+    }
+    let mus: Vec<f64> = distinct(
+        results
+            .c
+            .odds
+            .iter()
+            .filter_map(|r| r.honest_mining_fraction),
+    );
+    let low_mu = mus.iter().copied().fold(f64::INFINITY, f64::min);
+    let old = results.c.odds.iter().find(|r| {
+        r.committee_size == size
+            && r.attacker_fraction == 0.25
+            && r.honest_mining_fraction == Some(low_mu)
+    });
+    if let (Some(lottery), Some(old)) = (find(primary, None, 0.25), old) {
+        line(
+            out,
+            &format!(
+                "**Comparison with the v0.2 rule**, in which the miner of every 10th PoW-Tx block joined (rows of the tables with an honest mining fraction). An attacker that mines with all its IDs while only {} of honest IDs mine then gains seats: with 25% of active IDs it holds {} of mining IDs. At n = {size} its stall probability would be {} instead of {} under the lottery.",
                 share(low_mu),
-                pct1(low.attacker_mining_share),
-                prob(&full.p_stall),
-                prob(&low.p_stall)
+                pct1(old.attacker_share_of_population),
+                prob(&old.p_stall),
+                prob(&lottery.p_stall)
             ),
         );
         blank(out);
@@ -1089,16 +1274,21 @@ fn restart(out: &mut String, results: &M1Results) {
     blank(out);
     line(
         out,
-        "Tables `D1_restart_advantage.csv`, `D2_restart_advantage_curve.csv`; chart `D1_restart_advantage.png`. In the old design, entropy stayed fixed for the whole connection, so a miner could see its future winning steps at connection time and reconnect until one fell within a keep window W. Each reconnection costs C seconds. Advantage = expected time to an ID for a miner that stays connected ÷ expected time for the restarting miner.",
+        "Tables `D1_restart_advantage.csv`, `D2_restart_advantage_curve.csv`; chart `D1_restart_advantage.png`. In the old design, entropy stayed fixed for the whole connection, so a miner could see its future winning steps at connection time and reconnect until one fell within a keep window W. Each reconnection costs C seconds. Advantage = expected time to an ID for a miner that stays connected ÷ expected time for the restarting miner. The realistic restart cost (SPEC v0.3 §8 S5) is the grace epoch + convergence interval + post-admission wait: 150 + 150 + 150 = 450 s at the §2 defaults. The other costs bracket it.",
     );
     blank(out);
     let body: Vec<Vec<String>> = results
         .d
         .iter()
         .map(|r| {
+            let cost = if r.cost_case == REALISTIC_COST {
+                format!("{} s (realistic)", compact_number(r.restart_cost_s))
+            } else {
+                format!("{} s", compact_number(r.restart_cost_s))
+            };
             vec![
                 short_count(r.competing_miners),
-                format!("{} s", compact_number(r.restart_cost_s)),
+                cost,
                 window(r.keep_window_s),
                 format!("{:.1}×", r.advantage_old_design),
                 window(r.optimal_keep_window_s),
@@ -1118,9 +1308,29 @@ fn restart(out: &mut String, results: &M1Results) {
         ]),
         &body,
     );
+    let realistic: Vec<_> = results
+        .d
+        .iter()
+        .filter(|r| r.cost_case == REALISTIC_COST && r.keep_window_s == 86_400)
+        .collect();
+    if let (Some(small), Some(large)) = (realistic.first(), realistic.last()) {
+        line(
+            out,
+            &format!(
+                "At the realistic cost and a one-day keep window, the old design gave a restarting miner {:.1}× the honest rate with {} competing miners and {:.1}× with {}. Its best keep window gave {:.1}× and {:.1}×.",
+                small.advantage_old_design,
+                short_count(small.competing_miners),
+                large.advantage_old_design,
+                short_count(large.competing_miners),
+                small.maximum_advantage_old_design,
+                large.maximum_advantage_old_design
+            ),
+        );
+        blank(out);
+    }
     line(
         out,
-        "**Per-round entropy (current design): the advantage is exactly 1.** Each round's entropy is fresh and unpredictable and does not depend on what the miner did before: the header names the previous PoW-ID block, and the entropy aggregates every online member's signature. A miner gets one header per round, and abandoning it means waiting for the next block. So a connected miner wins each round with the same probability, 1/N, whatever it did before. A disconnected miner cannot win. Restarting can only remove rounds, never improve them, and never restarting is the fastest policy. The Monte Carlo check `D-per-round-entropy` (section 10) agrees.",
+        "**Per-round entropy (current design): the advantage is exactly 1.** Each round's entropy is fresh and unpredictable and does not depend on what the miner did before: the header names the previous PoW-ID block, and the entropy aggregates every online member's signature. A miner gets one header per round, and abandoning it means waiting for the next block. So a connected miner wins each round with the same probability, 1/N, whatever it did before. A disconnected miner cannot win. Restarting can only remove rounds, never improve them, and never restarting is the fastest policy. The Monte Carlo check `D-per-round-entropy` (section 11) agrees.",
     );
     blank(out);
 }
@@ -1139,52 +1349,57 @@ fn window(seconds: u64) -> String {
 fn hopping(out: &mut String, results: &M1Results) {
     line(out, "## 8. Difficulty hopping");
     blank(out);
+    let k = results.e.first().map_or(0, |r| r.window_blocks);
+    let clamp = results
+        .e
+        .iter()
+        .find(|r| r.clamp != "none")
+        .map_or("—".to_string(), |r| r.clamp.replace('x', "×"));
     line(
         out,
-        "Table `E1_difficulty_hopping.csv`. Variant A retargets difficulty every K blocks, Bitcoin-style. An attacker adds m times the honest miners for exactly one window, then leaves. Gain = the attacker's IDs per miner-second compared with count-based difficulty (Variant B). First-order formula: gain = m.",
+        &format!(
+            "Table `E1_difficulty_hopping.csv`. SPEC v0.3 §3.8 makes Variant B the default: difficulty follows the exact admitted online count, so there is no window to exploit. Variant A, a Bitcoin-style retarget every K = {k} blocks with a {clamp} clamp, is kept as the comparison. Against Variant A an attacker adds m times the honest miners for exactly one window, then leaves. Gain = the attacker's IDs per miner-second compared with Variant B. First-order formula: Variant A pays (1 + m) times Variant B's rate, a gain of m."
+        ),
     );
     blank(out);
-    let windows = distinct(results.e.iter().map(|r| r.window_blocks as f64));
     let ratios = distinct(results.e.iter().map(|r| r.attacker_ratio));
-    for k in windows {
-        line(out, &format!("**K = {} blocks:**", compact_number(k)));
-        blank(out);
-        let body: Vec<Vec<String>> = ratios
-            .iter()
-            .map(|m| {
-                let free = results.e.iter().find(|r| {
-                    r.window_blocks as f64 == k && r.attacker_ratio == *m && r.clamp == "none"
-                });
-                let clamped = results.e.iter().find(|r| {
-                    r.window_blocks as f64 == k && r.attacker_ratio == *m && r.clamp != "none"
-                });
-                vec![
-                    compact_number(*m),
-                    free.map_or("—".to_string(), |r| {
-                        format!("+{}%", compact_number(r.gain_percent))
-                    }),
-                    free.map_or("—".to_string(), |r| sig3(r.attack_window_hours)),
-                    free.map_or("—".to_string(), |r| sig3(r.recovery_window_hours)),
-                    clamped.map_or("—".to_string(), |r| sig3(r.recovery_window_hours)),
-                    free.map_or("—".to_string(), |r| {
-                        format!("{:.3}", r.cycle_issuance_ratio)
-                    }),
-                ]
-            })
-            .collect();
-        table(
-            out,
-            &strings(&[
-                "m",
-                "gain (Variant A)",
-                "hop window (h)",
-                "recovery window (h)",
-                "recovery with 4× clamp (h)",
-                "issuance over both windows ÷ target",
-            ]),
-            &body,
-        );
-    }
+    let body: Vec<Vec<String>> = ratios
+        .iter()
+        .map(|m| {
+            let free = results
+                .e
+                .iter()
+                .find(|r| r.attacker_ratio == *m && r.clamp == "none");
+            let clamped = results
+                .e
+                .iter()
+                .find(|r| r.attacker_ratio == *m && r.clamp != "none");
+            vec![
+                compact_number(*m),
+                free.map_or("—".to_string(), |r| {
+                    format!("+{}%", compact_number(r.gain_percent))
+                }),
+                free.map_or("—".to_string(), |r| sig3(r.attack_window_hours)),
+                clamped.map_or("—".to_string(), |r| sig3(r.recovery_window_hours)),
+                free.map_or("—".to_string(), |r| sig3(r.recovery_window_hours)),
+                clamped.map_or("—".to_string(), |r| {
+                    format!("{:.3}", r.cycle_issuance_ratio)
+                }),
+            ]
+        })
+        .collect();
+    table(
+        out,
+        &strings(&[
+            "m",
+            "gain against Variant A",
+            "hop window (h)",
+            "recovery window with the clamp (h)",
+            "recovery window without a clamp (h)",
+            "issuance over both windows ÷ target (with the clamp)",
+        ]),
+        &body,
+    );
     let b_checks: Vec<&Check> = results
         .checks
         .iter()
@@ -1199,7 +1414,7 @@ fn hopping(out: &mut String, results: &M1Results) {
         line(
             out,
             &format!(
-                "The 4× clamp only shortens the recovery window. The gain is earned before any retarget, so the clamp does not change it. Under Variant B with exact counts the first-order gain is 0. Its Monte Carlo cross-checks gave gain factors between {lo:.3} and {hi:.3}. Variant B's \"small correction from recent block times\" is not modelled here (deferred to M3)."
+                "The clamp only shortens the recovery window. The gain is earned before any retarget, so the clamp does not change it. Under Variant B with exact counts the first-order gain is 0; its Monte Carlo cross-checks gave gain factors between {lo:.3} and {hi:.3}. Variant B's small correction from recent block times is [P] and will be proposed and tested in M3; it is not modelled here."
             ),
         );
         blank(out);
@@ -1238,8 +1453,442 @@ fn ties(out: &mut String, results: &M1Results) {
     );
 }
 
+/// Distinct quorum options of one G1 layout, in table order.
+fn quorum_options<'a>(rows: &[&'a QuorumRow]) -> Vec<&'a QuorumRow> {
+    let mut options: Vec<&QuorumRow> = Vec::new();
+    for r in rows {
+        if !options.iter().any(|o| o.quorum == r.quorum) {
+            options.push(r);
+        }
+    }
+    options
+}
+
+fn option_label(row: &QuorumRow) -> String {
+    if row.spec_default && !row.quorum.starts_with("SPEC") {
+        format!("{} (SPEC default)", row.quorum)
+    } else {
+        row.quorum.clone()
+    }
+}
+
+fn quorum_tradeoff(out: &mut String, results: &M1Results) {
+    let g = &results.g;
+    let Some(kwcs) = g.quorum.iter().map(|r| r.kwcs).min() else {
+        return;
+    };
+    line(out, "## 10. Quorum trade-off (section G)");
+    blank(out);
+    line(
+        out,
+        "Tables `G1_quorum_kwc.csv`, `G2_split_rule.csv`, `G3_cac_quorum.csv`; chart `G1_quorum_tradeoff.png`. This section changes no SPEC quorum. For each quorum fraction q it shows what an attacker holding a fraction p of the seats can do: **stall** (deny every approval), **sign without honest members**, or get **two conflicting decisions approved**. Honest members sign at most one of two conflicting proposals; the attacker signs both and may show different proposals to different members. A pool of n members with quorum k therefore allows a conflict from 2k − n attacker seats. In the registered layout each condition applies to the leader WC and to the subordinates separately. The seat condition is necessary; the attacker also needs a proposer turn or another way to put two proposals in front of members.",
+    );
+    blank(out);
+    let layouts = [POOL_LAYOUT, REGISTERED_LAYOUT];
+    let at = |layout: &str| -> Vec<&QuorumRow> {
+        g.quorum
+            .iter()
+            .filter(|r| r.layout == layout && r.kwcs == kwcs)
+            .collect()
+    };
+    let mut thresholds = Vec::new();
+    for layout in layouts {
+        for o in quorum_options(&at(layout)) {
+            thresholds.push(vec![
+                layout.to_string(),
+                option_label(o),
+                o.approvals.clone(),
+                o.seats_to_stall.clone(),
+                o.seats_to_sign.clone(),
+                o.seats_to_conflict.clone(),
+            ]);
+        }
+    }
+    line(out, "**Attacker seats each option allows:**");
+    blank(out);
+    table(
+        out,
+        &strings(&[
+            "layout",
+            "quorum",
+            "signatures needed",
+            "seats to stall",
+            "seats to sign alone",
+            "seats for conflicting approvals",
+        ]),
+        &thresholds,
+    );
+    line(
+        out,
+        "The SPEC registered default, 7 of 10 and 21 of 30, is q = 0.7 in each group. Two-thirds rounded up per group gives 7 + 20 and is shown only as a comparison.",
+    );
+    blank(out);
+    for layout in layouts {
+        let rows = at(layout);
+        let options = quorum_options(&rows);
+        let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+        for (title, pick) in [
+            (
+                "can stall",
+                (|r: &QuorumRow| r.p_stall.clone()) as fn(&QuorumRow) -> String,
+            ),
+            ("can sign without honest members", |r: &QuorumRow| {
+                r.p_sign.clone()
+            }),
+            (
+                "can get two conflicting decisions approved",
+                |r: &QuorumRow| r.p_conflict.clone(),
+            ),
+        ] {
+            line(
+                out,
+                &format!(
+                    "**{layout}: probability that the attacker {title}** (per KWC, exact hypergeometric, {} KWCs):",
+                    short_count(kwcs)
+                ),
+            );
+            blank(out);
+            let mut headers = vec!["p".to_string()];
+            headers.extend(options.iter().map(|o| option_label(o)));
+            let body: Vec<Vec<String>> = fractions
+                .iter()
+                .map(|p| {
+                    let mut row = vec![share(*p)];
+                    row.extend(options.iter().map(|o| {
+                        rows.iter()
+                            .find(|r| r.quorum == o.quorum && r.attacker_fraction == *p)
+                            .map_or("—".to_string(), |r| prob(&pick(r)))
+                    }));
+                    row
+                })
+                .collect();
+            table(out, &headers, &body);
+        }
+    }
+    quorum_counts(out, results, kwcs);
+    split_rule(out, results, kwcs);
+    committee_quorum(out, results);
+    quorum_plain_english(out, results, kwcs);
+}
+
+fn quorum_counts(out: &mut String, results: &M1Results, kwcs: u64) {
+    let p = 0.25;
+    let rows: Vec<&QuorumRow> = results
+        .g
+        .quorum
+        .iter()
+        .filter(|r| r.kwcs == kwcs && r.attacker_fraction == p)
+        .collect();
+    let Some(first) = rows.first() else {
+        return;
+    };
+    line(
+        out,
+        &format!(
+            "**Expected counts at p = 25%, {} KWCs.** \"Now\" is the expected number of KWCs in the state at one moment. \"Over {} years\" is the expected number of compositions in the state under the SPEC §10 H6 refresh model and the adopted allocation ({} compositions, binomial, no bans or deactivation):",
+            short_count(kwcs),
+            compact_number(10.0),
+            compact_number(first.compositions_over_horizon)
+        ),
+    );
+    blank(out);
+    let body: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| {
+            vec![
+                r.layout.to_string(),
+                option_label(r),
+                count(&r.expected_kwcs_stall),
+                count(&r.expected_kwcs_sign),
+                count(&r.expected_kwcs_conflict),
+                count(&format!("{:e}", r.expected_compositions_sign)),
+                count(&format!("{:e}", r.expected_compositions_conflict)),
+            ]
+        })
+        .collect();
+    table(
+        out,
+        &strings(&[
+            "layout",
+            "quorum",
+            "stall, now",
+            "sign alone, now",
+            "conflict, now",
+            "sign alone, over 10 years",
+            "conflict, over 10 years",
+        ]),
+        &body,
+    );
+}
+
+fn split_rule(out: &mut String, results: &M1Results, kwcs: u64) {
+    let rows: Vec<_> = results.g.split.iter().filter(|r| r.kwcs == kwcs).collect();
+    let Some(first) = rows.first() else {
+        return;
+    };
+    line(
+        out,
+        &format!(
+            "**Split rule** (`G2_split_rule.csv`): a lower quorum for PoWit only, while decisions that global validation cannot re-check (bans, MOBu/MOBr, offline requests, committee blocks) keep two-thirds, {} voted by the full KWC. PoWit at the lower quorum ({} KWCs):",
+            first.decision_approvals,
+            short_count(kwcs)
+        ),
+    );
+    blank(out);
+    let body: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| {
+            vec![
+                format!(
+                    "{} ({}; {})",
+                    r.powit_quorum, r.powit_pool_approvals, r.powit_registered_approvals
+                ),
+                share(r.attacker_fraction),
+                prob(&r.powit_pool_p_stall),
+                prob(&r.powit_pool_p_sign),
+                prob(&r.powit_registered_p_stall),
+                prob(&r.powit_registered_p_sign),
+            ]
+        })
+        .collect();
+    table(
+        out,
+        &strings(&[
+            "PoWit quorum (unregistered; registered)",
+            "p",
+            "unregistered PoWit: stall",
+            "unregistered PoWit: sign alone",
+            "registered PoWit: stall",
+            "registered PoWit: sign alone",
+        ]),
+        &body,
+    );
+    line(
+        out,
+        &format!(
+            "**Decisions at two-thirds ({}), unchanged by the split:**",
+            first.decision_approvals
+        ),
+    );
+    blank(out);
+    let mut seen = Vec::new();
+    let body: Vec<Vec<String>> = rows
+        .iter()
+        .filter(|r| {
+            let fresh = !seen.contains(&r.attacker_fraction.to_bits());
+            seen.push(r.attacker_fraction.to_bits());
+            fresh
+        })
+        .map(|r| {
+            vec![
+                share(r.attacker_fraction),
+                prob(&r.decision_p_stall),
+                prob(&r.decision_p_sign),
+                prob(&r.decision_p_conflict),
+            ]
+        })
+        .collect();
+    table(
+        out,
+        &strings(&["p", "stall", "approve alone", "two conflicting approvals"]),
+        &body,
+    );
+    line(out, "**Which harms each threshold controls:**");
+    blank(out);
+    table(
+        out,
+        &strings(&[
+            "threshold",
+            "harms it controls",
+            "already neutralised elsewhere",
+        ]),
+        &[
+            strings(&[
+                "PoWit quorum",
+                "stalling PoWits in a KWC (its miners must move to another KWC after the grace epoch); signing valid PoWits without honest members, and so censoring",
+                "invalid or early-signed blocks: every validator recomputes the hash chain and rejects a block received before its own timestamp (§3.7); two blocks at one height: the lower-hash tie-break (§3.7); two headers from one miner in a round: equivocation evidence (§3.4)",
+            ]),
+            strings(&[
+                "decision quorum (two-thirds)",
+                "false or conflicting bans, MOBu/MOBr, offline requests and committee blocks, which rest on witnesses' observations rather than on data validators can recompute",
+                "committee placements, joins and leaves: every node recomputes them and rejects a mismatch (§4.2, §4.3); two conflicting committee blocks from one leader: both rejected (§4.3)",
+            ]),
+        ],
+    );
+}
+
+fn committee_quorum(out: &mut String, results: &M1Results) {
+    let rows = &results.g.cac;
+    let Some(first) = rows.first() else {
+        return;
+    };
+    let mut options: Vec<&gb_analytic::quorum_tradeoff::CacQuorumRow> = Vec::new();
+    for r in rows {
+        if !options.iter().any(|o| o.quorum == r.quorum) {
+            options.push(r);
+        }
+    }
+    line(
+        out,
+        &format!(
+            "**Committee (`G3_cac_quorum.csv`)**: n = {} under the seat lottery, {} active IDs. Seats needed:",
+            first.committee_size,
+            short_count(first.active_ids)
+        ),
+    );
+    blank(out);
+    let thresholds: Vec<Vec<String>> = options
+        .iter()
+        .map(|o| {
+            vec![
+                if o.spec_default {
+                    format!("{} (SPEC default)", o.quorum)
+                } else {
+                    o.quorum.clone()
+                },
+                o.approvals.to_string(),
+                o.seats_to_stall.to_string(),
+                o.seats_to_sign.to_string(),
+                o.seats_to_conflict.to_string(),
+            ]
+        })
+        .collect();
+    table(
+        out,
+        &strings(&[
+            "quorum",
+            "approvals needed",
+            "seats to stall",
+            "seats to approve alone",
+            "seats for conflicting blocks",
+        ]),
+        &thresholds,
+    );
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let mut headers = vec!["p".to_string()];
+    for o in &options {
+        headers.push(format!("{}: stall", o.quorum));
+        headers.push(format!("{}: approve alone", o.quorum));
+        headers.push(format!("{}: conflict", o.quorum));
+    }
+    let body: Vec<Vec<String>> = fractions
+        .iter()
+        .map(|p| {
+            let mut row = vec![share(*p)];
+            for o in &options {
+                let r = rows
+                    .iter()
+                    .find(|r| r.quorum == o.quorum && r.attacker_fraction == *p);
+                for pick in [
+                    |r: &gb_analytic::quorum_tradeoff::CacQuorumRow| r.p_stall.clone(),
+                    |r: &gb_analytic::quorum_tradeoff::CacQuorumRow| r.p_sign.clone(),
+                    |r: &gb_analytic::quorum_tradeoff::CacQuorumRow| r.p_conflict.clone(),
+                ] {
+                    row.push(r.map_or("—".to_string(), |r| prob(&pick(r))));
+                }
+            }
+            row
+        })
+        .collect();
+    table(out, &headers, &body);
+}
+
+fn quorum_plain_english(out: &mut String, results: &M1Results, kwcs: u64) {
+    let g = &results.g;
+    let pool = |quorum: &str, p: f64| {
+        g.quorum.iter().find(|r| {
+            r.layout == POOL_LAYOUT
+                && r.kwcs == kwcs
+                && r.quorum == quorum
+                && r.attacker_fraction == p
+        })
+    };
+    let low = g
+        .quorum
+        .iter()
+        .filter(|r| r.layout == POOL_LAYOUT)
+        .min_by(|a, b| a.quorum_fraction.total_cmp(&b.quorum_fraction))
+        .map(|r| r.quorum.clone());
+    let default = g
+        .quorum
+        .iter()
+        .find(|r| r.layout == POOL_LAYOUT && r.spec_default)
+        .map(|r| r.quorum.clone());
+    line(
+        out,
+        "**In plain English.** This section does not choose a quorum.",
+    );
+    blank(out);
+    if let (Some(low), Some(default)) = (low, default) {
+        if let (Some(l25), Some(d25), Some(l10), Some(d10)) = (
+            pool(&low, 0.25),
+            pool(&default, 0.25),
+            pool(&low, 0.1),
+            pool(&default, 0.1),
+        ) {
+            line(
+                out,
+                &format!(
+                    "- **A lower quorum makes stalling harder.** In a pool of 40, stalling needs {} attacker seats at q = {low} against {} at {default}. At p = 25% the chance that a KWC can be stalled falls from {} to {}.",
+                    l25.seats_to_stall.trim_start_matches("≥ "),
+                    d25.seats_to_stall.trim_start_matches("≥ "),
+                    prob(&d25.p_stall),
+                    prob(&l25.p_stall)
+                ),
+            );
+            line(
+                out,
+                &format!(
+                    "- **It makes signing without honest members easier.** That needs {} seats at q = {low} against {} at {default}; at p = 25% the chance rises from {} to {}.",
+                    l25.seats_to_sign.trim_start_matches("≥ "),
+                    d25.seats_to_sign.trim_start_matches("≥ "),
+                    prob(&d25.p_sign),
+                    prob(&l25.p_sign)
+                ),
+            );
+            line(
+                out,
+                &format!(
+                    "- **It makes conflicting approvals much easier.** Two conflicting decisions need {} attacker seats at q = {low} against {} at {default}. At p = 10% that is possible in {} of KWCs, against {}.",
+                    l10.seats_to_conflict.trim_start_matches("≥ "),
+                    d10.seats_to_conflict.trim_start_matches("≥ "),
+                    prob(&l10.p_conflict),
+                    prob(&d10.p_conflict)
+                ),
+            );
+        }
+    }
+    line(
+        out,
+        "- **What global validation neutralises.** Every validator recomputes a PoWit's hash chain and checks its timing (§3.7), so a lower PoWit quorum cannot make an invalid or early block valid. It changes who can stall, censor or sign valid blocks. Decisions about bans, online status, offline requests and committee blocks rest on witnesses' observations, which validators cannot recompute; for those the quorum is the protection.",
+    );
+    let cac = g
+        .cac
+        .iter()
+        .filter(|r| !r.spec_default)
+        .min_by(|a, b| a.attacker_fraction.total_cmp(&b.attacker_fraction));
+    if let Some(r) = cac {
+        line(
+            out,
+            &format!(
+                "- **The committee.** At q = {} a conflict needs {} of {} seats, and an attacker with {} of active IDs holds that many with probability {}. Placement conflicts are neutralised, because every node recomputes placement (§4.2), and a leader with two conflicting approved blocks has both rejected (§4.3). The committee's remaining power is over compiling bans that KWCs already approved: it can delay or omit them.",
+                r.quorum,
+                r.seats_to_conflict,
+                r.committee_size,
+                share(r.attacker_fraction),
+                prob(&r.p_conflict)
+            ),
+        );
+    }
+    line(
+        out,
+        "- **Not considered.** A quorum at or below 50%: two disjoint groups of honest members could then approve conflicting decisions with no attacker at all. The single-member entropy stall, where one online member withholds its entropy signature, does not depend on the quorum; One Chance (§4.5) handles it.",
+    );
+    blank(out);
+}
+
 fn cross_checks(out: &mut String, results: &M1Results) {
-    line(out, "## 10. Cross-checks");
+    line(out, "## 11. Cross-checks");
     blank(out);
     line(
         out,
@@ -1334,6 +1983,10 @@ fn closing(out: &mut String) {
         out,
         "- The modelling assumptions behind every number are in `docs/ASSUMPTIONS.md`; charts are in `charts/`.",
     );
+    line(
+        out,
+        "- A one-to-two-page brief for a general technical audience is in `M1_PUBLIC_BRIEF.md`.",
+    );
 }
 
 #[cfg(test)]
@@ -1354,6 +2007,25 @@ mod tests {
         assert_eq!(prob("4.12268e-1"), "41.2%");
         assert_eq!(prob("9.88022e-10"), "9.88 × 10⁻¹⁰");
         assert_eq!(prob("1.95e-399"), "1.95 × 10⁻³⁹⁹");
+        assert_eq!(prob("1.00000e0"), "> 99.9%");
+        assert_eq!(prob("9.99600e-1"), "> 99.9%");
+        assert_eq!(prob("9.99400e-1"), "99.9%");
+    }
+
+    #[test]
+    fn probability_pairs_gain_digits_until_they_differ() {
+        assert_eq!(
+            prob_pair("3.48687e-2", "3.48744e-2"),
+            ("3.4869%".to_string(), "3.4874%".to_string())
+        );
+        assert_eq!(
+            prob_pair("2.26000e-76", "2.35000e-76"),
+            ("2.26 × 10⁻⁷⁶".to_string(), "2.35 × 10⁻⁷⁶".to_string())
+        );
+        assert_eq!(
+            prob_pair("1.5e-1", "1.5e-1"),
+            ("15.0%".to_string(), "15.0%".to_string())
+        );
     }
 
     #[test]

@@ -25,6 +25,13 @@
 //! probability, `1/N`, whatever it did before. A disconnected miner cannot win at all.
 //! Restarting can only remove rounds, never improve them. The fastest policy is never to
 //! restart, and the advantage of any restart policy is at most **1**.
+//!
+//! # Realistic restart cost
+//!
+//! SPEC v0.3 (§8 S5) defines the realistic cost of one restart as the grace epoch plus the
+//! convergence interval plus the post-admission wait, in rounds of the PoW-ID interval:
+//! `C = I × (grace + convergence × grace + post-admission)`, which is 450 s at the §2
+//! defaults. It is always added to the cost grid.
 
 use crate::error::{Result, ensure};
 use crate::mc::{RunningStats, bernoulli, geometric_failures};
@@ -134,6 +141,37 @@ pub fn optimal_window(q: f64, restart_cost_s: f64) -> (u64, f64) {
     (best.0, honest_expected_time_s(q, restart_cost_s) / best.1)
 }
 
+/// Label of the realistic restart cost in tables.
+pub const REALISTIC_COST: &str = "realistic (grace epoch + convergence + post-admission wait)";
+/// Label of the other restart costs in tables.
+pub const GRID_COST: &str = "grid";
+
+/// Realistic restart cost in seconds: the grace epoch plus the convergence interval plus the
+/// post-admission wait, at the PoW-ID target interval (SPEC §8 S5).
+pub fn realistic_restart_cost_s(config: &Config) -> f64 {
+    let interval = config.issuance.pow_id_target_interval_s.value;
+    let grace = f64::from(config.timing.grace_epoch_rounds.value);
+    let convergence = config.admission.convergence_interval_epochs.value * grace;
+    let wait = f64::from(config.admission.post_admission_wait_rounds.value);
+    interval * (grace + convergence + wait)
+}
+
+/// Restart costs to report: the grid plus the realistic cost, ascending, each with its label.
+pub fn restart_costs(config: &Config) -> Vec<(f64, &'static str)> {
+    let realistic = realistic_restart_cost_s(config);
+    let mut costs: Vec<(f64, &'static str)> = config
+        .analytic
+        .restart
+        .restart_costs_s
+        .iter()
+        .filter(|c| **c != realistic)
+        .map(|c| (*c, GRID_COST))
+        .collect();
+    costs.push((realistic, REALISTIC_COST));
+    costs.sort_by(|a, b| a.0.total_cmp(&b.0));
+    costs
+}
+
 /// D1 row.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RestartRow {
@@ -141,6 +179,8 @@ pub struct RestartRow {
     pub competing_miners: u64,
     /// Restart cost C, seconds.
     pub restart_cost_s: f64,
+    /// [`REALISTIC_COST`] or [`GRID_COST`].
+    pub cost_case: &'static str,
     /// Keep window W, seconds.
     pub keep_window_s: u64,
     /// Per-step win probability q.
@@ -168,12 +208,13 @@ pub fn section_d(config: &Config) -> Result<Vec<RestartRow>> {
     let mut rows = Vec::new();
     for &miners in &grid.competing_miners {
         let q = per_step_win_probability(miners, interval)?;
-        for &cost in &grid.restart_costs_s {
+        for (cost, case) in restart_costs(config) {
             let (optimal, maximum) = optimal_window(q, cost);
             for &window in &grid.keep_windows_s {
                 rows.push(RestartRow {
                     competing_miners: miners,
                     restart_cost_s: cost,
+                    cost_case: case,
                     keep_window_s: window,
                     per_step_win_probability: q,
                     honest_expected_days: honest_expected_time_s(q, cost) / 86_400.0,
@@ -197,6 +238,8 @@ pub struct CurveRow {
     pub competing_miners: u64,
     /// Restart cost C, seconds.
     pub restart_cost_s: f64,
+    /// [`REALISTIC_COST`] or [`GRID_COST`].
+    pub cost_case: &'static str,
     /// Keep window W, seconds.
     pub keep_window_s: u64,
     /// Advantage factor, old design.
@@ -217,11 +260,12 @@ pub fn advantage_curve(config: &Config) -> Result<Vec<CurveRow>> {
     let mut rows = Vec::new();
     for &miners in &grid.competing_miners {
         let q = per_step_win_probability(miners, interval)?;
-        for &cost in &grid.restart_costs_s {
+        for (cost, case) in restart_costs(config) {
             for window in curve_windows() {
                 rows.push(CurveRow {
                     competing_miners: miners,
                     restart_cost_s: cost,
+                    cost_case: case,
                     keep_window_s: window,
                     advantage_old_design: advantage_old_design(q, cost, window),
                 });
@@ -442,15 +486,44 @@ mod tests {
     }
 
     #[test]
-    fn section_d_table_covers_the_grid() {
+    fn realistic_restart_cost_is_450_seconds_at_spec_defaults() {
+        // 30 s × (5 grace rounds + 1 epoch of 5 rounds + 5 post-admission rounds).
+        let config = Config::default();
+        assert_eq!(realistic_restart_cost_s(&config), 450.0);
+        let costs = restart_costs(&config);
+        assert_eq!(
+            costs,
+            vec![
+                (60.0, GRID_COST),
+                (300.0, GRID_COST),
+                (450.0, REALISTIC_COST),
+                (600.0, GRID_COST)
+            ]
+        );
+    }
+
+    #[test]
+    fn realistic_cost_is_not_duplicated_when_already_in_the_grid() {
+        let mut config = Config::default();
+        config.analytic.restart.restart_costs_s = vec![60.0, 450.0];
+        let costs = restart_costs(&config);
+        assert_eq!(costs, vec![(60.0, GRID_COST), (450.0, REALISTIC_COST)]);
+    }
+
+    #[test]
+    fn section_d_table_covers_the_grid_and_the_realistic_cost() {
         let config = Config::default();
         let rows = section_d(&config).unwrap();
         let g = &config.analytic.restart;
         assert_eq!(
             rows.len(),
-            g.competing_miners.len() * g.restart_costs_s.len() * g.keep_windows_s.len()
+            g.competing_miners.len() * (g.restart_costs_s.len() + 1) * g.keep_windows_s.len()
         );
         assert!(rows.iter().all(|r| r.advantage_per_round_entropy == 1.0));
+        assert!(
+            rows.iter()
+                .any(|r| r.cost_case == REALISTIC_COST && r.restart_cost_s == 450.0)
+        );
     }
 
     #[test]

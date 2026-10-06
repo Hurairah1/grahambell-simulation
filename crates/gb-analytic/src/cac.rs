@@ -1,93 +1,172 @@
 //! Section C — Chain Allocation Committee stalling and capture (SPEC §4.3, §8 S21).
 //!
-//! The committee has `n` members, first in, first out; the miner of every 10th PoW-Tx block
-//! joins. An Allocation Committee Block needs `a = ⌈2n/3⌉` approvals. The attacker can
+//! The committee has `n` members, first in, first out; one new member joins for every 10th
+//! PoW-Tx block. An Allocation Committee Block needs `a = ⌈2n/3⌉` approvals. The attacker can
 //! **stall** the committee when it holds `n − a + 1` seats, and **capture** it (approve
 //! without honest members) when it holds `a` seats.
 //!
-//! # Seat model
+//! # Seat rules
 //!
-//! Under the \[P\] seat rule, one ID holds at most one seat. A member's 10th-block win passes to
-//! the next 10th-block miner who is not a member, so each new member is uniform over the
-//! `N − n` non-members. This FIFO chain is doubly stochastic, so its stationary distribution
-//! is uniform over ordered sets of `n` distinct IDs. The attacker's seat count is therefore
-//! **hypergeometric** over the `N` mining IDs, with `K` of them the attacker's. With
-//! duplicates allowed, it is binomial with `p = K/N`.
+//! - **Lottery (SPEC v0.3, primary).** The new member is the ID at a hash-derived position of
+//!   the canonical active list (SPEC §3.11); a draw that lands on a member moves to the next
+//!   position. The draw happens before the oldest member leaves. Where the attacker's IDs sit
+//!   in the list matters slightly:
+//!   - **spread through the list** (the primary model): a draw that lands on a member passes
+//!     to a neighbour of random type, so the new member is close to uniform over the `N − n`
+//!     non-members. The attacker's seat count is then **hypergeometric** over the `N` active
+//!     IDs, `K` of them the attacker's.
+//!   - **in one block of the list** (sensitivity): a draw that lands on a member almost
+//!     always passes to a neighbour of the same type, so each new member is the attacker's
+//!     with probability `K/N` whatever the committee holds. The seat count is then
+//!     **binomial** with `p = K/N`.
 //!
-//! # Events per year
+//!   The two differ by `O(n/N)` per draw; Monte Carlo runs of the real next-position rule
+//!   check both. Either way the attacker's expected committee share equals its share of
+//!   active IDs, and mining power plays no part. Every 10th PoW-Tx block refreshes the
+//!   committee.
+//! - **10th-block miner (the v0.2 rule, comparison).** The miner of every 10th PoW-Tx block
+//!   joins; a member's win passes to the next 10th-block miner who is not a member. New
+//!   members are uniform over the non-members among the `N_m` mining IDs, so the seat count
+//!   is hypergeometric over mining IDs. If only a fraction μ of honest IDs mines, the
+//!   attacker's share of mining IDs is `p / (p + μ(1 − p))`. Member wins delay refreshes.
 //!
-//! - **Brief's approximation:** one independent composition per `n` refreshes, so events per
-//!   year ≈ (refreshes per year / n) × P(state).
-//! - **Exact onset rate**, under the same model: the committee enters a state at a refresh when
-//!   the remaining `n − 1` members hold `t − 1` attacker seats, the departing (oldest) member
-//!   is honest, and the new member is the attacker's. In stationarity this is
-//!   `P(X = t − 1) · (n − t + 1)/n · (K − t + 1)/(N − n)`. With duplicates allowed it becomes
-//!   `P(X = t − 1) · (n − t + 1)/n · p`, which equals `p(1 − p)·P(Bin(n − 1, p) = t − 1)`.
+//! For the uniform rules the FIFO chain is doubly stochastic, so the committee's stationary
+//! distribution is uniform over ordered `n`-sets of distinct IDs; that is where the
+//! hypergeometric count comes from.
+//!
+//! # Events per year and episode lengths
+//!
+//! - **Exact entries (primary).** The committee enters "at least `t` attacker seats" at a
+//!   refresh when it holds `t − 1`, the new member is the attacker's and the departing
+//!   (oldest) member is honest. In stationarity that is
+//!   `P(X = t − 1) · (n − t + 1)/n · P(new member is the attacker's | t − 1 seats)`, with the
+//!   last factor `(K − t + 1)/(N − n)` (hypergeometric) or `K/N` (binomial).
+//! - **Share of time** in the state is `P(X ≥ t)`.
+//! - **Mean episode length** is the share of time divided by the entry rate, in refreshes,
+//!   and in hours using the seconds per refresh.
+//! - **The M1 brief's estimate (comparison only):** one independent composition per `n`
+//!   refreshes, so events per year ≈ (refreshes per year / `n`) × `P(state)`.
 
 use crate::dist::{ExactDistribution, SeatModel};
 use crate::error::{AnalyticError, Result, ensure};
 use crate::exact::{Q, decimal, integer, log10, ratio, scientific, to_f64};
-use crate::mc::{RunningStats, uniform_below};
+use crate::mc::{RunningStats, shuffle, uniform_below};
 use crate::validation::Check;
 use crate::witness::attacker_ids;
 use gb_config::Config;
-use gb_config::protocol::ApprovalThreshold;
+use gb_config::protocol::Fraction;
 use gb_runlog::rng_stream;
 use num_traits::{One, Zero};
 use serde::Serialize;
 use std::collections::VecDeque;
 
-/// Committee seat model.
-#[derive(Debug, Clone, PartialEq)]
+/// Committee seat model: the seat rule together with the population it draws from.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommitteeModel {
-    /// \[P\] One seat per ID: seats are distinct IDs drawn from `population` mining IDs.
-    DistinctMembers {
-        /// Mining IDs the committee is drawn from.
+    /// Lottery (primary), attacker IDs spread through the canonical list: each new member is
+    /// uniform over the non-members (hypergeometric seat count).
+    LotterySpread {
+        /// Active IDs in the canonical list, `N`.
+        population: u64,
+        /// Attacker IDs among them, `K`.
+        attackers: u64,
+    },
+    /// Lottery, attacker IDs in one block of the canonical list: each new member is the
+    /// attacker's with probability `K/N` (binomial seat count).
+    LotteryBlock {
+        /// Active IDs in the canonical list, `N`.
+        population: u64,
+        /// Attacker IDs among them, `K`.
+        attackers: u64,
+    },
+    /// The v0.2 rule (comparison): the miner of every 10th PoW-Tx block joins, skipping
+    /// existing members.
+    TenthBlockMiner {
+        /// Mining IDs, `N_m`.
         population: u64,
         /// Attacker IDs among them.
         attackers: u64,
     },
-    /// Comparison: duplicates allowed; each seat is the attacker's with probability `p`.
-    WithReplacement(Q),
 }
 
 impl CommitteeModel {
-    /// Label used in tables.
+    /// Seat rule, as used in tables.
+    pub fn rule(&self) -> &'static str {
+        match self {
+            CommitteeModel::LotterySpread { .. } | CommitteeModel::LotteryBlock { .. } => "lottery",
+            CommitteeModel::TenthBlockMiner { .. } => "10th-block miner (v0.2 comparison)",
+        }
+    }
+
+    /// Seat model, as used in tables.
     pub fn label(&self) -> &'static str {
         match self {
-            CommitteeModel::DistinctMembers { .. } => "one seat per ID (hypergeometric)",
-            CommitteeModel::WithReplacement(_) => "duplicates allowed (binomial)",
+            CommitteeModel::LotterySpread { .. } => {
+                "attacker IDs spread through the list (hypergeometric)"
+            }
+            CommitteeModel::LotteryBlock { .. } => {
+                "attacker IDs in one block of the list (binomial)"
+            }
+            CommitteeModel::TenthBlockMiner { .. } => "hypergeometric over mining IDs",
+        }
+    }
+
+    /// IDs the committee is drawn from and the attacker's IDs among them.
+    pub fn population_and_attackers(&self) -> (u64, u64) {
+        match self {
+            CommitteeModel::LotterySpread {
+                population,
+                attackers,
+            }
+            | CommitteeModel::LotteryBlock {
+                population,
+                attackers,
+            }
+            | CommitteeModel::TenthBlockMiner {
+                population,
+                attackers,
+            } => (*population, *attackers),
         }
     }
 
     fn seat_model(&self) -> SeatModel {
+        let (population, attackers) = self.population_and_attackers();
         match self {
-            CommitteeModel::DistinctMembers {
+            CommitteeModel::LotteryBlock { .. } => {
+                SeatModel::Binomial(ratio(attackers, population))
+            }
+            _ => SeatModel::Hypergeometric {
                 population,
                 attackers,
-            } => SeatModel::Hypergeometric {
-                population: *population,
-                attackers: *attackers,
             },
-            CommitteeModel::WithReplacement(p) => SeatModel::Binomial(p.clone()),
         }
     }
 
     /// Probability that a newly joining member is the attacker's, given `seats` attacker
-    /// members before the refresh.
+    /// members among the `members` before the refresh.
     fn joiner_is_attacker(&self, members: u64, seats: u64) -> Q {
+        let (population, attackers) = self.population_and_attackers();
         match self {
-            CommitteeModel::DistinctMembers {
-                population,
-                attackers,
-            } => ratio(attackers.saturating_sub(seats), population - members),
-            CommitteeModel::WithReplacement(p) => p.clone(),
+            CommitteeModel::LotteryBlock { .. } => ratio(attackers, population),
+            _ => ratio(attackers.saturating_sub(seats), population - members),
+        }
+    }
+
+    /// Probability that a newly joining member is honest, given `seats` attacker members.
+    fn joiner_is_honest(&self, members: u64, seats: u64) -> Q {
+        let (population, attackers) = self.population_and_attackers();
+        match self {
+            CommitteeModel::LotteryBlock { .. } => ratio(population - attackers, population),
+            _ => ratio(
+                (population - attackers).saturating_sub(members - seats),
+                population - members,
+            ),
         }
     }
 }
 
 /// Approvals needed out of `members` under the threshold rule.
-pub fn approvals_needed(members: u64, threshold: &ApprovalThreshold) -> Result<u64> {
+pub fn approvals_needed(members: u64, threshold: &Fraction) -> Result<u64> {
     threshold.approvals_needed(members).ok_or_else(|| {
         AnalyticError::InvalidInput("approval threshold has a zero denominator".to_string())
     })
@@ -115,8 +194,13 @@ pub fn seat_distribution(members: u64, model: &CommitteeModel) -> Result<ExactDi
     ExactDistribution::new(members, &model.seat_model())
 }
 
-/// Committee refreshes per year: 10th-block miners per year, times the share that are not
-/// already members under the seat rule.
+/// 10th PoW-Tx blocks per year: `seconds_per_year / tx_interval / join_every`.
+pub fn tenth_blocks_per_year(seconds_per_year: u64, tx_interval_s: &Q, join_every: u64) -> Q {
+    integer(seconds_per_year) / tx_interval_s / integer(join_every)
+}
+
+/// Committee refreshes per year. Every 10th PoW-Tx block refreshes a lottery committee; under
+/// the v0.2 rule only the share of 10th-block wins that go to non-members does.
 pub fn refreshes_per_year(
     seconds_per_year: u64,
     tx_interval_s: &Q,
@@ -124,12 +208,12 @@ pub fn refreshes_per_year(
     members: u64,
     model: &CommitteeModel,
 ) -> Q {
-    let tenth_blocks = integer(seconds_per_year) / tx_interval_s / integer(join_every);
+    let tenth_blocks = tenth_blocks_per_year(seconds_per_year, tx_interval_s, join_every);
     match model {
-        CommitteeModel::DistinctMembers { population, .. } => {
+        CommitteeModel::TenthBlockMiner { population, .. } => {
             tenth_blocks * integer(population - members) / integer(*population)
         }
-        CommitteeModel::WithReplacement(_) => tenth_blocks,
+        _ => tenth_blocks,
     }
 }
 
@@ -150,11 +234,39 @@ pub fn onset_probability_per_refresh(
     Ok(before * oldest_honest * model.joiner_is_attacker(members, threshold_seats - 1))
 }
 
+/// Exact probability, per refresh in stationarity, that the committee leaves the state
+/// "attacker holds at least `threshold_seats` seats": it holds exactly that many, the oldest
+/// member is the attacker's and the new member is honest.
+pub fn exit_probability_per_refresh(
+    members: u64,
+    threshold_seats: u64,
+    model: &CommitteeModel,
+) -> Result<Q> {
+    ensure(
+        threshold_seats >= 1 && threshold_seats <= members,
+        "threshold seats must lie between 1 and the committee size",
+    )?;
+    let distribution = seat_distribution(members, model)?;
+    let at = distribution.pmf(threshold_seats);
+    let oldest_attacker = ratio(threshold_seats, members);
+    Ok(at * oldest_attacker * model.joiner_is_honest(members, threshold_seats))
+}
+
+/// Mean length of one episode in a state, in refreshes: share of time ÷ entries per refresh.
+/// `None` when the state is never entered.
+pub fn mean_episode_refreshes(time_fraction: &Q, onset: &Q) -> Option<f64> {
+    (!onset.is_zero()).then(|| to_f64(&(time_fraction / onset)))
+}
+
 // ----------------------------------------------------------------------------- tables
 
-/// C1: probability of stalling and capture.
+/// C1: probability of stalling and capture, with mean episode lengths.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OddsRow {
+    /// Seat rule: "lottery" or the v0.2 comparison.
+    pub rule: &'static str,
+    /// Seat model within the rule.
+    pub model: &'static str,
     /// Committee size n.
     pub committee_size: u64,
     /// Approvals needed, ⌈2n/3⌉.
@@ -163,53 +275,63 @@ pub struct OddsRow {
     pub stall_seats: u64,
     /// Attacker fraction p of active IDs.
     pub attacker_fraction: f64,
-    /// Fraction of honest IDs that mine (attacker IDs always mine).
-    pub honest_mining_fraction: f64,
-    /// Seat model.
-    pub model: &'static str,
-    /// Mining IDs the committee draws from (one-seat-per-ID model).
-    pub mining_population: Option<u64>,
-    /// Attacker share of mining IDs, `p / (p + μ(1 − p))`.
-    pub attacker_mining_share: f64,
-    /// P(attacker can stall).
+    /// Fraction of honest IDs that mine (v0.2 comparison only; attacker IDs always mine).
+    pub honest_mining_fraction: Option<f64>,
+    /// IDs the committee draws from: active IDs (lottery) or mining IDs (comparison).
+    pub population: u64,
+    /// Attacker IDs among them.
+    pub attacker_ids: u64,
+    /// Attacker share of the IDs drawn from.
+    pub attacker_share_of_population: f64,
+    /// P(attacker can stall) = share of time stalled.
     pub p_stall: String,
     /// log10 P(stall).
     pub log10_p_stall: f64,
+    /// Mean length of one stall episode, hours (empty when never entered).
+    pub mean_stall_hours: Option<f64>,
     /// P(attacker holds ⌈2n/3⌉ seats).
     pub p_capture: String,
     /// log10 P(capture).
     pub log10_p_capture: f64,
+    /// Mean length of one capture episode, hours (empty when never entered).
+    pub mean_capture_hours: Option<f64>,
 }
 
-/// C2: events per year.
+/// C2: entries per year and episode lengths; the brief's estimate last, as a comparison.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EventsRow {
+    /// Seat rule.
+    pub rule: &'static str,
+    /// Seat model within the rule.
+    pub model: &'static str,
     /// Committee size n.
     pub committee_size: u64,
-    /// Attacker fraction p.
+    /// Attacker fraction p of active IDs.
     pub attacker_fraction: f64,
-    /// Fraction of honest IDs that mine.
-    pub honest_mining_fraction: f64,
-    /// Seat model.
-    pub model: &'static str,
+    /// Fraction of honest IDs that mine (v0.2 comparison only).
+    pub honest_mining_fraction: Option<f64>,
     /// "stall" or "capture".
     pub state: &'static str,
     /// Attacker seats that define the state.
     pub threshold_seats: u64,
+    /// Exact expected entries into the state per year.
+    pub entries_per_year_exact: String,
+    /// Long-run share of time in the state, P(state).
+    pub share_of_time: String,
+    /// Mean length of one episode, in refreshes.
+    pub mean_episode_refreshes: Option<f64>,
+    /// Mean length of one episode, in hours.
+    pub mean_episode_hours: Option<f64>,
     /// Committee refreshes per year.
     pub refreshes_per_year: f64,
-    /// Independent compositions per year assumed by the brief, refreshes / n.
-    pub independent_compositions_per_year: f64,
-    /// Brief's estimate: compositions per year × P(state).
-    pub events_per_year_independence_approximation: String,
-    /// Exact expected entries into the state per year (same seat model).
-    pub onsets_per_year_exact: String,
-    /// Exact onsets ÷ approximation.
-    pub ratio_exact_to_approximation: f64,
-    /// Long-run fraction of time in the state, P(state).
-    pub time_fraction: String,
-    /// Mean length of one episode, in refreshes.
-    pub mean_episode_refreshes: f64,
+    /// Mean seconds between refreshes.
+    pub seconds_per_refresh: f64,
+    /// Comparison: independent compositions per year assumed by the M1 brief, refreshes / n.
+    pub brief_independent_compositions_per_year: f64,
+    /// Comparison: the M1 brief's estimate, compositions per year × P(state).
+    pub brief_estimate_events_per_year: String,
+    /// Exact entries ÷ the brief's estimate.
+    pub ratio_exact_to_brief_estimate: f64,
 }
 
 /// All section C tables.
@@ -219,6 +341,41 @@ pub struct SectionC {
     pub odds: Vec<OddsRow>,
     /// C2.
     pub events: Vec<EventsRow>,
+}
+
+/// Committee models for one committee size and attacker fraction: the two lottery layouts,
+/// then the v0.2 comparison for every honest mining fraction.
+fn models(config: &Config, p: &Q) -> Result<Vec<(CommitteeModel, Option<f64>)>> {
+    let grid = &config.analytic.cac;
+    let population = grid.active_population;
+    let attackers = attacker_ids(p, population);
+    let mut models = vec![
+        (
+            CommitteeModel::LotterySpread {
+                population,
+                attackers,
+            },
+            None,
+        ),
+        (
+            CommitteeModel::LotteryBlock {
+                population,
+                attackers,
+            },
+            None,
+        ),
+    ];
+    for mu_f in &grid.honest_mining_fractions {
+        let (mining, mining_attackers) = mining_population(population, p, &decimal(*mu_f)?);
+        models.push((
+            CommitteeModel::TenthBlockMiner {
+                population: mining,
+                attackers: mining_attackers,
+            },
+            Some(*mu_f),
+        ));
+    }
+    Ok(models)
 }
 
 /// Builds every section C table from the configuration.
@@ -233,114 +390,83 @@ pub fn section_c(config: &Config) -> Result<SectionC> {
         let stall = stall_seats(members, approvals);
         for p_f in &grid.attacker_fractions {
             let p = decimal(*p_f)?;
-            for mu_f in &grid.honest_mining_fractions {
-                let mu = decimal(*mu_f)?;
-                let (population, attackers) = mining_population(grid.mining_population, &p, &mu);
-                let share = ratio(attackers, population);
-                let models = [
-                    CommitteeModel::DistinctMembers {
-                        population,
-                        attackers,
-                    },
-                    CommitteeModel::WithReplacement(share.clone()),
-                ];
-                for model in models {
-                    let distribution = seat_distribution(members, &model)?;
-                    let (p_stall, p_capture) = (
-                        distribution.at_least(stall),
-                        distribution.at_least(approvals),
-                    );
-                    tables.odds.push(OddsRow {
-                        committee_size: members,
-                        approvals_needed: approvals,
-                        stall_seats: stall,
-                        attacker_fraction: *p_f,
-                        honest_mining_fraction: *mu_f,
+            for (model, mu) in models(config, &p)? {
+                let distribution = seat_distribution(members, &model)?;
+                let refreshes = refreshes_per_year(
+                    config.model.seconds_per_year,
+                    &tx_interval,
+                    join_every,
+                    members,
+                    &model,
+                );
+                let seconds_per_refresh = integer(config.model.seconds_per_year) / &refreshes;
+                let hours = |episode: Option<f64>| {
+                    episode.map(|e| e * to_f64(&seconds_per_refresh) / 3_600.0)
+                };
+                let mut episodes = Vec::new();
+                for (state, seats) in [("stall", stall), ("capture", approvals)] {
+                    let time = distribution.at_least(seats);
+                    let onset = onset_probability_per_refresh(members, seats, &model)?;
+                    let episode = mean_episode_refreshes(&time, &onset);
+                    episodes.push(hours(episode));
+                    let compositions = &refreshes / integer(members);
+                    let estimate = &compositions * &time;
+                    let exact = &refreshes * &onset;
+                    tables.events.push(EventsRow {
+                        rule: model.rule(),
                         model: model.label(),
-                        mining_population: matches!(model, CommitteeModel::DistinctMembers { .. })
-                            .then_some(population),
-                        attacker_mining_share: to_f64(&share),
-                        p_stall: scientific(&p_stall, 6),
-                        log10_p_stall: log10(&p_stall).unwrap_or(f64::NEG_INFINITY),
-                        p_capture: scientific(&p_capture, 6),
-                        log10_p_capture: log10(&p_capture).unwrap_or(f64::NEG_INFINITY),
+                        committee_size: members,
+                        attacker_fraction: *p_f,
+                        honest_mining_fraction: mu,
+                        state,
+                        threshold_seats: seats,
+                        entries_per_year_exact: scientific(&exact, 6),
+                        share_of_time: scientific(&time, 6),
+                        mean_episode_refreshes: episode,
+                        mean_episode_hours: hours(episode),
+                        refreshes_per_year: to_f64(&refreshes),
+                        seconds_per_refresh: to_f64(&seconds_per_refresh),
+                        brief_independent_compositions_per_year: to_f64(&compositions),
+                        brief_estimate_events_per_year: scientific(&estimate, 6),
+                        ratio_exact_to_brief_estimate: if estimate.is_zero() {
+                            0.0
+                        } else {
+                            to_f64(&(&exact / &estimate))
+                        },
                     });
-                    let refreshes = refreshes_per_year(
-                        config.model.seconds_per_year,
-                        &tx_interval,
-                        join_every,
-                        members,
-                        &model,
-                    );
-                    for (state, seats, probability) in [
-                        ("stall", stall, &p_stall),
-                        ("capture", approvals, &p_capture),
-                    ] {
-                        let onset = onset_probability_per_refresh(members, seats, &model)?;
-                        tables.events.push(events_row(
-                            members,
-                            *p_f,
-                            *mu_f,
-                            &model,
-                            state,
-                            seats,
-                            &refreshes,
-                            probability,
-                            &onset,
-                        ));
-                    }
                 }
+                let (p_stall, p_capture) = (
+                    distribution.at_least(stall),
+                    distribution.at_least(approvals),
+                );
+                let (population, attackers) = model.population_and_attackers();
+                tables.odds.push(OddsRow {
+                    rule: model.rule(),
+                    model: model.label(),
+                    committee_size: members,
+                    approvals_needed: approvals,
+                    stall_seats: stall,
+                    attacker_fraction: *p_f,
+                    honest_mining_fraction: mu,
+                    population,
+                    attacker_ids: attackers,
+                    attacker_share_of_population: attackers as f64 / population as f64,
+                    p_stall: scientific(&p_stall, 6),
+                    log10_p_stall: log10(&p_stall).unwrap_or(f64::NEG_INFINITY),
+                    mean_stall_hours: episodes[0],
+                    p_capture: scientific(&p_capture, 6),
+                    log10_p_capture: log10(&p_capture).unwrap_or(f64::NEG_INFINITY),
+                    mean_capture_hours: episodes[1],
+                });
             }
         }
     }
     Ok(tables)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn events_row(
-    members: u64,
-    p: f64,
-    mu: f64,
-    model: &CommitteeModel,
-    state: &'static str,
-    seats: u64,
-    refreshes: &Q,
-    probability: &Q,
-    onset: &Q,
-) -> EventsRow {
-    let compositions = refreshes / integer(members);
-    let approximation = &compositions * probability;
-    let exact = refreshes * onset;
-    let ratio = if approximation.is_zero() {
-        0.0
-    } else {
-        to_f64(&(&exact / &approximation))
-    };
-    let episode = if onset.is_zero() {
-        0.0
-    } else {
-        to_f64(&(probability / onset))
-    };
-    EventsRow {
-        committee_size: members,
-        attacker_fraction: p,
-        honest_mining_fraction: mu,
-        model: model.label(),
-        state,
-        threshold_seats: seats,
-        refreshes_per_year: to_f64(refreshes),
-        independent_compositions_per_year: to_f64(&compositions),
-        events_per_year_independence_approximation: scientific(&approximation, 6),
-        onsets_per_year_exact: scientific(&exact, 6),
-        ratio_exact_to_approximation: ratio,
-        time_fraction: scientific(probability, 6),
-        mean_episode_refreshes: episode,
-    }
-}
-
 // ----------------------------------------------------------------------------- checks
 
-/// Results of simulating a FIFO committee with the one-seat-per-ID rule.
+/// Results of simulating a FIFO committee.
 #[derive(Debug, Clone, Default)]
 struct CommitteeSimulation {
     stall_time: Vec<f64>,
@@ -351,29 +477,57 @@ struct CommitteeSimulation {
     draws: Vec<f64>,
 }
 
+/// How a simulated committee picks its new member.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Draw {
+    /// The lottery's next-position rule over the canonical list.
+    NextPosition,
+    /// The v0.2 rule: redraw until a non-member wins a 10th block.
+    Redraw,
+}
+
+/// Draws a new member who is not yet one; returns its position and the number of draws used.
+fn pick_member<R: rand_core::Rng + ?Sized>(
+    rng: &mut R,
+    is_member: &[bool],
+    draw: Draw,
+) -> (usize, f64) {
+    let population = is_member.len() as u64;
+    let mut draws = 1.0;
+    let mut position = uniform_below(rng, population) as usize;
+    while is_member[position] {
+        match draw {
+            Draw::NextPosition => position = (position + 1) % is_member.len(),
+            Draw::Redraw => {
+                draws += 1.0;
+                position = uniform_below(rng, population) as usize;
+            }
+        }
+    }
+    (position, draws)
+}
+
+/// Simulates a FIFO committee over a list of `is_attacker.len()` IDs. The new member is drawn
+/// before the oldest leaves, as SPEC §4.3 requires.
 fn simulate_committee(
     seed: u64,
-    population: u64,
-    attackers: u64,
+    label: &str,
+    is_attacker: &[bool],
     members: u64,
     approvals: u64,
     refreshes: u64,
+    draw: Draw,
 ) -> CommitteeSimulation {
     const BATCHES: u64 = 50;
-    let mut rng = rng_stream(
-        seed,
-        &format!("C-committee-{members}-{attackers}-{population}"),
-    );
-    let mut is_member = vec![false; population as usize];
+    let mut rng = rng_stream(seed, label);
+    let mut is_member = vec![false; is_attacker.len()];
     let mut queue = VecDeque::with_capacity(members as usize);
     while (queue.len() as u64) < members {
-        let id = uniform_below(&mut rng, population);
-        if !is_member[id as usize] {
-            is_member[id as usize] = true;
-            queue.push_back(id);
-        }
+        let (id, _) = pick_member(&mut rng, &is_member, draw);
+        is_member[id] = true;
+        queue.push_back(id);
     }
-    let mut seats = queue.iter().filter(|id| **id < attackers).count() as u64;
+    let mut seats = queue.iter().filter(|id| is_attacker[**id]).count() as u64;
     let stall = stall_seats(members, approvals);
     let mut sim = CommitteeSimulation::default();
     let batch_size = refreshes / BATCHES;
@@ -381,20 +535,13 @@ fn simulate_committee(
     let mut batch = [0.0f64; 6];
     for step in 0..burn_in + batch_size * BATCHES {
         let before = seats;
-        let mut draws = 0.0;
-        let joiner = loop {
-            draws += 1.0;
-            let id = uniform_below(&mut rng, population);
-            if !is_member[id as usize] {
-                break id;
-            }
-        };
-        is_member[joiner as usize] = true;
+        let (joiner, draws) = pick_member(&mut rng, &is_member, draw);
+        is_member[joiner] = true;
         queue.push_back(joiner);
-        seats += u64::from(joiner < attackers);
+        seats += u64::from(is_attacker[joiner]);
         if let Some(oldest) = queue.pop_front() {
-            is_member[oldest as usize] = false;
-            seats -= u64::from(oldest < attackers);
+            is_member[oldest] = false;
+            seats -= u64::from(is_attacker[oldest]);
         }
         if step < burn_in {
             continue;
@@ -434,20 +581,25 @@ fn batch_estimate(values: &[f64]) -> RunningStats {
 
 /// Section C cross-checks.
 pub fn checks(config: &Config) -> Result<Vec<Check>> {
-    let mut checks = vec![binomial_onset_identity_check()?];
-    checks.extend(committee_monte_carlo_checks(config)?);
+    let mut checks = vec![binomial_onset_identity_check()?, flow_balance_check()?];
+    checks.extend(lottery_monte_carlo_checks(config)?);
+    checks.extend(tenth_block_monte_carlo_checks(config)?);
     Ok(checks)
 }
 
 fn binomial_onset_identity_check() -> Result<Check> {
     let mut failures = 0;
     let mut rows = 0;
-    for (members, p) in [
-        (30, decimal(0.4)?),
-        (100, decimal(0.33)?),
-        (600, decimal(0.3)?),
+    for (members, population, attackers) in [
+        (30, 10_000, 4_000),
+        (100, 100_000, 33_000),
+        (600, 2_900_000, 870_000),
     ] {
-        let model = CommitteeModel::WithReplacement(p.clone());
+        let model = CommitteeModel::LotteryBlock {
+            population,
+            attackers,
+        };
+        let p = ratio(attackers, population);
         let smaller = ExactDistribution::new(members - 1, &SeatModel::Binomial(p.clone()))?;
         for seats in [members / 3, members * 2 / 3] {
             rows += 1;
@@ -459,85 +611,223 @@ fn binomial_onset_identity_check() -> Result<Check> {
     Ok(Check::all_rows(
         "C",
         "C-binomial-onset-identity",
-        "with duplicates allowed, the onset formula equals p(1-p)·P(Bin(n-1,p) = t-1) exactly",
+        "lottery with attacker IDs in one block (binomial): the onset formula equals p(1-p)·P(Bin(n-1,p) = t-1) exactly",
         failures,
         rows,
     ))
 }
 
-fn committee_monte_carlo_checks(config: &Config) -> Result<Vec<Check>> {
+fn flow_balance_check() -> Result<Check> {
+    // In stationarity every state is entered as often as it is left. Entries and exits are
+    // computed by separate formulas, so equality checks both and the stationary distribution.
+    let mut failures = 0;
+    let mut rows = 0;
+    for (members, population, attackers) in [
+        (30_u64, 1_000_u64, 330_u64),
+        (100, 100_000, 25_000),
+        (600, 2_900_000, 957_000),
+    ] {
+        let spread = CommitteeModel::LotterySpread {
+            population,
+            attackers,
+        };
+        let block = CommitteeModel::LotteryBlock {
+            population,
+            attackers,
+        };
+        let tenth = CommitteeModel::TenthBlockMiner {
+            population,
+            attackers,
+        };
+        for model in [spread, block, tenth] {
+            for seats in [1, members / 3, members / 2, members * 2 / 3, members] {
+                rows += 1;
+                let entries = onset_probability_per_refresh(members, seats, &model)?;
+                let exits = exit_probability_per_refresh(members, seats, &model)?;
+                failures += u64::from(entries != exits);
+            }
+        }
+    }
+    Ok(Check::all_rows(
+        "C",
+        "C-flow-balance",
+        "stationary FIFO committee: exact entries into each state equal exact exits from it, for every seat model",
+        failures,
+        rows,
+    ))
+}
+
+/// The cases simulated by the Monte Carlo checks.
+const MC_CASES: [(u64, f64); 4] = [(30, 0.3), (30, 0.4), (100, 0.3), (100, 0.4)];
+
+#[allow(clippy::too_many_arguments)]
+fn committee_checks(
+    checks: &mut Vec<Check>,
+    sim: &CommitteeSimulation,
+    model: &CommitteeModel,
+    members: u64,
+    approvals: u64,
+    refreshes: u64,
+    k: f64,
+    id: &str,
+    what: &str,
+) -> Result<()> {
+    let distribution = seat_distribution(members, model)?;
+    let stall = stall_seats(members, approvals);
+    let cases = [
+        (
+            "stall-time",
+            to_f64(&distribution.at_least(stall)),
+            &sim.stall_time,
+        ),
+        (
+            "capture-time",
+            to_f64(&distribution.at_least(approvals)),
+            &sim.capture_time,
+        ),
+        (
+            "stall-onsets",
+            to_f64(&onset_probability_per_refresh(members, stall, model)?),
+            &sim.stall_onsets,
+        ),
+        (
+            "capture-onsets",
+            to_f64(&onset_probability_per_refresh(members, approvals, model)?),
+            &sim.capture_onsets,
+        ),
+    ];
+    for (name, exact, values) in cases {
+        if exact * refreshes as f64 / (members as f64) < 30.0 {
+            continue; // too rare for this sample size
+        }
+        checks.push(Check::monte_carlo(
+            "C",
+            &format!("{id}-{name}"),
+            &format!("{what}: simulated {name} per refresh vs exact formula"),
+            exact,
+            batch_estimate(values).estimate(),
+            k,
+            0.0,
+        ));
+    }
+    Ok(())
+}
+
+fn lottery_monte_carlo_checks(config: &Config) -> Result<Vec<Check>> {
     let mc = &config.run.monte_carlo;
-    let k = mc.tolerance_standard_errors;
     let threshold = config.cac.approval_threshold.value;
-    let population = mc.committee_population;
+    let population = mc.lottery_population;
     let mut checks = Vec::new();
-    for members in [30_u64, 100] {
+    for (members, p_f) in MC_CASES {
         let approvals = approvals_needed(members, &threshold)?;
-        for p_f in [0.3, 0.4] {
-            let attackers = attacker_ids(&decimal(p_f)?, population);
-            let model = CommitteeModel::DistinctMembers {
-                population,
-                attackers,
-            };
+        let attackers = attacker_ids(&decimal(p_f)?, population);
+        let block: Vec<bool> = (0..population).map(|i| i < attackers).collect();
+        let mut spread = block.clone();
+        let mut layout_rng = rng_stream(
+            config.run.seed,
+            &format!("C-lottery-layout-{members}-{p_f}"),
+        );
+        shuffle(&mut layout_rng, &mut spread);
+        let layouts = [
+            (
+                "spread",
+                spread,
+                CommitteeModel::LotterySpread {
+                    population,
+                    attackers,
+                },
+            ),
+            (
+                "block",
+                block,
+                CommitteeModel::LotteryBlock {
+                    population,
+                    attackers,
+                },
+            ),
+        ];
+        for (layout, is_attacker, model) in layouts {
+            let id = format!("C-mc-lottery-{layout}-n{members}-p{p_f}");
             let sim = simulate_committee(
                 config.run.seed,
-                population,
-                attackers,
+                &id,
+                &is_attacker,
                 members,
                 approvals,
                 mc.committee_refreshes,
+                Draw::NextPosition,
             );
-            let distribution = seat_distribution(members, &model)?;
-            let stall = stall_seats(members, approvals);
-            let cases = [
-                (
-                    "stall-time",
-                    to_f64(&distribution.at_least(stall)),
-                    &sim.stall_time,
+            committee_checks(
+                &mut checks,
+                &sim,
+                &model,
+                members,
+                approvals,
+                mc.committee_refreshes,
+                mc.tolerance_standard_errors,
+                &id,
+                &format!(
+                    "lottery with the next-position rule, attacker IDs {} (N={population}, n={members}, p={p_f})",
+                    if layout == "spread" {
+                        "spread through the list, vs hypergeometric"
+                    } else {
+                        "in one block of the list, vs binomial"
+                    }
                 ),
-                (
-                    "capture-time",
-                    to_f64(&distribution.at_least(approvals)),
-                    &sim.capture_time,
-                ),
-                (
-                    "stall-onsets",
-                    to_f64(&onset_probability_per_refresh(members, stall, &model)?),
-                    &sim.stall_onsets,
-                ),
-                (
-                    "capture-onsets",
-                    to_f64(&onset_probability_per_refresh(members, approvals, &model)?),
-                    &sim.capture_onsets,
-                ),
-            ];
-            for (name, exact, values) in cases {
-                if exact * mc.committee_refreshes as f64 / (members as f64) < 30.0 {
-                    continue; // too rare for this sample size
-                }
-                checks.push(Check::monte_carlo(
-                    "C",
-                    &format!("C-mc-{name}-n{members}-p{p_f}"),
-                    &format!(
-                        "FIFO committee with one seat per ID (N={population}, n={members}, p={p_f}): simulated {name} per refresh vs exact formula"
-                    ),
-                    exact,
-                    batch_estimate(values).estimate(),
-                    k,
-                    0.0,
-                ));
-            }
-            let skips: f64 = sim.skips.iter().sum();
-            let draws: f64 = sim.draws.iter().sum();
-            checks.push(Check::relative(
-                "C",
-                &format!("C-mc-skip-rate-n{members}-p{p_f}"),
-                &format!("share of 10th-block wins that go to existing members (N={population}, n={members}) vs n/N"),
-                members as f64 / population as f64,
-                skips / draws,
-                0.05,
-            ));
+            )?;
         }
+    }
+    Ok(checks)
+}
+
+fn tenth_block_monte_carlo_checks(config: &Config) -> Result<Vec<Check>> {
+    let mc = &config.run.monte_carlo;
+    let threshold = config.cac.approval_threshold.value;
+    let population = mc.committee_population;
+    let mut checks = Vec::new();
+    for (members, p_f) in MC_CASES {
+        let approvals = approvals_needed(members, &threshold)?;
+        let attackers = attacker_ids(&decimal(p_f)?, population);
+        let is_attacker: Vec<bool> = (0..population).map(|i| i < attackers).collect();
+        let model = CommitteeModel::TenthBlockMiner {
+            population,
+            attackers,
+        };
+        let id = format!("C-mc-tenth-block-n{members}-p{p_f}");
+        let sim = simulate_committee(
+            config.run.seed,
+            &id,
+            &is_attacker,
+            members,
+            approvals,
+            mc.committee_refreshes,
+            Draw::Redraw,
+        );
+        committee_checks(
+            &mut checks,
+            &sim,
+            &model,
+            members,
+            approvals,
+            mc.committee_refreshes,
+            mc.tolerance_standard_errors,
+            &id,
+            &format!(
+                "v0.2 comparison rule, members' wins passed on (N={population}, n={members}, p={p_f}), vs hypergeometric"
+            ),
+        )?;
+        let skips: f64 = sim.skips.iter().sum();
+        let draws: f64 = sim.draws.iter().sum();
+        checks.push(Check::relative(
+            "C",
+            &format!("C-mc-skip-rate-n{members}-p{p_f}"),
+            &format!(
+                "v0.2 comparison rule: share of 10th-block wins that go to existing members (N={population}, n={members}) vs n/N"
+            ),
+            members as f64 / population as f64,
+            skips / draws,
+            0.05,
+        ));
     }
     Ok(checks)
 }
@@ -546,10 +836,10 @@ fn committee_monte_carlo_checks(config: &Config) -> Result<Vec<Check>> {
 mod tests {
     use super::*;
 
-    fn two_thirds() -> ApprovalThreshold {
-        ApprovalThreshold {
-            numerator: 2,
-            denominator: 3,
+    fn spread(population: u64, attackers: u64) -> CommitteeModel {
+        CommitteeModel::LotterySpread {
+            population,
+            attackers,
         }
     }
 
@@ -561,51 +851,79 @@ mod tests {
             (600, 400, 201),
             (1000, 667, 334),
         ] {
-            let a = approvals_needed(members, &two_thirds()).unwrap();
+            let a = approvals_needed(members, &Fraction::new(2, 3)).unwrap();
             assert_eq!((a, stall_seats(members, a)), (approvals, stall));
         }
     }
 
     #[test]
-    fn stall_probability_at_600_members_and_33_percent_is_about_41_percent() {
-        let model = CommitteeModel::WithReplacement(ratio(33, 100));
+    fn block_layout_stall_probability_at_600_members_and_33_percent_is_about_41_percent() {
+        // Binomial reference value carried over from M1 (duplicates allowed, p = 0.33).
+        let model = CommitteeModel::LotteryBlock {
+            population: 100,
+            attackers: 33,
+        };
         let p = seat_distribution(600, &model).unwrap().at_least(201);
         assert!((to_f64(&p) - 0.412_268_244_173_590_9).abs() < 1e-12);
     }
 
     #[test]
-    fn honest_non_mining_raises_the_attacker_share() {
-        let (population, attackers) = mining_population(2_100_000, &ratio(1, 4), &ratio(1, 2));
-        assert_eq!(attackers, 525_000);
-        assert_eq!(population, 525_000 + 787_500);
+    fn lottery_seat_share_equals_active_share_in_expectation() {
+        // E[X] = n·K/N for both lottery layouts.
+        for model in [
+            spread(2_900_000, 870_000),
+            CommitteeModel::LotteryBlock {
+                population: 2_900_000,
+                attackers: 870_000,
+            },
+        ] {
+            let d = seat_distribution(600, &model).unwrap();
+            let mean = (0..=600u64).fold(Q::zero(), |acc, x| acc + d.pmf(x) * integer(x));
+            assert_eq!(mean, integer(180));
+        }
+    }
+
+    #[test]
+    fn honest_non_mining_raises_the_attacker_share_under_the_v02_rule() {
+        let (population, attackers) = mining_population(2_900_000, &ratio(1, 4), &ratio(1, 2));
+        assert_eq!(attackers, 725_000);
+        assert_eq!(population, 725_000 + 1_087_500);
         let share = attackers as f64 / population as f64;
         assert!((share - 0.25 / (0.25 + 0.5 * 0.75)).abs() < 1e-12);
     }
 
     #[test]
-    fn refresh_rate_accounts_for_skipped_members() {
-        let model = CommitteeModel::DistinctMembers {
-            population: 2_100_000,
+    fn lottery_refreshes_every_tenth_block_and_the_v02_rule_skips_members() {
+        let lottery = refreshes_per_year(31_536_000, &integer(10), 10, 600, &spread(2_900_000, 0));
+        assert_eq!(lottery, integer(315_360));
+        let tenth = CommitteeModel::TenthBlockMiner {
+            population: 2_900_000,
             attackers: 0,
         };
-        let refreshes = refreshes_per_year(31_536_000, &integer(10), 10, 600, &model);
+        let refreshes = refreshes_per_year(31_536_000, &integer(10), 10, 600, &tenth);
         assert_eq!(
             refreshes,
-            integer(315_360) * integer(2_099_400) / integer(2_100_000)
+            integer(315_360) * integer(2_899_400) / integer(2_900_000)
         );
-        let plain = refreshes_per_year(
-            31_536_000,
-            &integer(10),
-            10,
-            600,
-            &CommitteeModel::WithReplacement(ratio(1, 4)),
-        );
-        assert_eq!(plain, integer(315_360));
     }
 
     #[test]
-    fn onset_rate_exceeds_the_independent_composition_estimate() {
-        let model = CommitteeModel::WithReplacement(ratio(4, 10));
+    fn entries_equal_exits_in_stationarity() {
+        let model = spread(1_000, 330);
+        for seats in [1, 10, 20, 30] {
+            assert_eq!(
+                onset_probability_per_refresh(30, seats, &model).unwrap(),
+                exit_probability_per_refresh(30, seats, &model).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn onset_rate_exceeds_the_independent_composition_estimate_for_rare_states() {
+        let model = CommitteeModel::LotteryBlock {
+            population: 10,
+            attackers: 4,
+        };
         let onset = onset_probability_per_refresh(30, 20, &model).unwrap();
         let hold = seat_distribution(30, &model).unwrap().at_least(20);
         let ratio = to_f64(&(onset * integer(30) / hold));
@@ -613,10 +931,20 @@ mod tests {
     }
 
     #[test]
+    fn mean_episode_is_time_share_over_entry_rate() {
+        assert_eq!(
+            mean_episode_refreshes(&ratio(1, 10), &ratio(1, 1_000)),
+            Some(100.0)
+        );
+        assert_eq!(mean_episode_refreshes(&ratio(1, 10), &Q::zero()), None);
+    }
+
+    #[test]
     fn onset_threshold_outside_the_committee_is_rejected() {
-        let model = CommitteeModel::WithReplacement(ratio(1, 4));
+        let model = spread(1_000, 250);
         assert!(onset_probability_per_refresh(30, 0, &model).is_err());
         assert!(onset_probability_per_refresh(30, 31, &model).is_err());
+        assert!(exit_probability_per_refresh(30, 31, &model).is_err());
     }
 
     #[test]
@@ -626,10 +954,30 @@ mod tests {
         let g = &config.analytic.cac;
         let combos = g.committee_sizes.len()
             * g.attacker_fractions.len()
-            * g.honest_mining_fractions.len()
-            * 2;
+            * (2 + g.honest_mining_fractions.len());
         assert_eq!(c.odds.len(), combos);
         assert_eq!(c.events.len(), 2 * combos);
+        let lottery_rows = c.odds.iter().filter(|r| r.rule == "lottery").count();
+        assert_eq!(
+            lottery_rows,
+            2 * g.committee_sizes.len() * g.attacker_fractions.len()
+        );
+    }
+
+    #[test]
+    fn stall_episode_at_600_members_and_30_percent_lasts_about_40_minutes() {
+        let config = Config::default();
+        let c = section_c(&config).unwrap();
+        let primary = spread(1, 0).label();
+        let row = c
+            .odds
+            .iter()
+            .find(|r| r.model == primary && r.committee_size == 600 && r.attacker_fraction == 0.3)
+            .unwrap();
+        // Reference: P(X ≥ 201) / onset rate × 100 s, from Python's exact integer arithmetic
+        // (23.94 refreshes).
+        let hours = row.mean_stall_hours.unwrap();
+        assert!((hours - 0.664_900_352_341_196_8).abs() < 1e-9, "{hours}");
     }
 
     #[test]

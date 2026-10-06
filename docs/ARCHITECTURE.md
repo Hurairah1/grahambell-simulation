@@ -2,7 +2,7 @@
 
 This document describes how the Stage 1 code is organised, how later milestones plug in, and how the protocol core will be shared with the Stage 3 testnet. It is a design document: crates marked *planned* below do not exist yet.
 
-`docs/SPEC.md` is the source of truth for protocol rules. Nothing in this document changes a rule. The allocation algorithm in the last section is a **proposal for architect review**.
+`docs/SPEC.md` is the source of truth for protocol rules. Nothing in this document changes a rule. The allocation algorithm in the last section began as a proposal; the architect adopted it on 2026-10-06 as SPEC §4.2 [D], and the section now records its rationale.
 
 ## 1. Goals and constraints
 
@@ -20,8 +20,8 @@ This document describes how the Stage 1 code is organised, how later milestones 
 |---|---|---|---|
 | `gb-config` | exists | M0 | Typed parameters for every SPEC §2 row (value, status D/P/O, sweep), M1 grids, run settings; TOML loading by deep merge over defaults. |
 | `gb-runlog` | exists | M0 | Run id, git commit and dirty flag, UTC timestamp, resolved-config hash, SHA-256 manifest of outputs, seeded ChaCha20 streams. |
-| `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–F), with independent cross-checks. Pure functions; no I/O. |
-| `gb-cli` | exists | M0+ | Binary `gb`: loads config, runs analyses, writes CSV/PNG/SUMMARY and the run log. Front end only; never recomputes results. |
+| `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–G), with independent cross-checks. Pure functions; no I/O. |
+| `gb-cli` | exists | M0+ | Binary `gb`: loads config, runs analyses, writes CSV/PNG/SUMMARY, the public brief and the run log. Front end only; never recomputes results. |
 | `gb-protocol` | planned | M2 | Shared protocol core, listed in section 5. |
 | `gb-crypto-tests` | planned | M2 | Micro-tests with real SHA-256 and BLS12-381: S11 grinding, S14, proof of possession, equivocation, and equivalence tests for any abstraction a simulator uses. |
 | `gb-sim` | planned | M3, M4 | Tier 1 discrete-event simulator. |
@@ -58,14 +58,15 @@ Each M1 table becomes a check that a later simulator must pass.
 | M1 output | Later check |
 |---|---|
 | A1–A3, A7 time to threshold, long-run share | M3 issuance simulator (S2, S3) within its confidence interval; H2 within ±5% |
-| A4 adaptive cap (checkpoints, worst phase, safety factor) | M3 S7 |
+| A4 adaptive cap (checkpoints, worst phase, safety factor k = 7/6) | M3 S7 |
 | A6 genesis to issue | M3/M6 with household downtime profiles |
 | B1–B3 per-KWC capture/stall probabilities | M4 allocation simulation (S15) at the same p and network sizes |
-| B4 KWC compositions over 10 years | M4 count of compositions and their effective independence |
-| C1–C2 committee stall/capture and onset rates | M4 S21, including the independent-composition approximation |
-| D1 restart advantage | M3 S5 (H4) |
-| E1 difficulty-hopping gain | M3 S6 (H5) |
+| B4 KWC compositions over 10 years (adopted allocation, bans, deactivation) | M4 count of compositions, distinct episodes and the one-seat entry ratio |
+| C1–C2 committee stall/capture, entries per year, episode lengths (seat lottery) | M4 S21 with the real next-position rule and registration-order layouts |
+| D1 restart advantage, including the realistic cost of 450 s | M3 S5 (H4) |
+| E1 difficulty-hopping gain against the Variant A comparison | M3 S6 (H5), with Variant B's correction once proposed |
 | F1 same-step tie rate | M3 fork/orphan rate |
+| G1–G3 quorum trade-off (stall, sign alone, conflicting approvals) | M4 S15–S21 under whichever quorums the architect chooses; conflicting approvals also need the proposer rules |
 
 ## 5. `gb-protocol` and the Stage 3 testnet
 
@@ -75,8 +76,9 @@ Each M1 table becomes a check that a later simulator must pass.
 - **§3.4 entropy lock:** miner signature, member signatures, BLS aggregate (via `blst`), and `E = SHA256("GB/entropy-out" ‖ aggregate ‖ bitfield)`.
 - **§3.5 hash chain:** `h_n`, start rule (a), and rule (b) for S13.
 - **§3.6 witness signing condition** and **§3.7 validation:** quorum with bitfield and proof of possession, full chain recomputation, timestamp rules, the same-height tie-break, uniqueness.
-- **§3.8 difficulty** variants A and B, and **§3.9 issuance** (fixed; adaptive with checkpointed cap).
-- **§4.2 allocation**, once the architect fixes the algorithm (see section 8).
+- **§3.8 difficulty** Variant B (default) and the Variant A comparison, and **§3.9 issuance** (fixed; adaptive with the checkpointed cap and its safety factor).
+- **§3.11 registration index** and the canonical active list.
+- **§4.2 allocation** (section 8) and the **§4.3 seat lottery**, both recomputed by every node from chain data.
 
 **Sharing.** `gb-sim` calls these functions directly, and so will the Stage 3 node. M2 produces test vectors (inputs and expected hashes, signatures and validation verdicts) that both the simulator and the testnet node must reproduce. A rule change therefore lands in one place and is caught by the vectors everywhere.
 
@@ -102,9 +104,14 @@ These [P] rules and comparisons are defined in the SPEC but not needed by M1. Th
 - sorted-hash field ordering (S14);
 - "unreachable is not refusal" vs strict One Chance (§4.6, S17);
 - diversity constraints in allocation (§4.2);
-- proposer rotation and failure behaviour (§4.4).
+- proposer rotation and failure behaviour (§4.4);
+- Variant B's correction from recent block times (§3.8), once proposed.
 
-## 8. Allocation proposal — for architect review
+The lottery beacon offset k and the allocation beacon delay are already typed parameters (both [O]); M1 does not depend on them, because it models the draws as uniform. M2 and M4 measure what the miner of a beacon block can gain by withholding it.
+
+## 8. Allocation — adopted as SPEC §4.2 [D]
+
+The architect adopted this algorithm on 2026-10-06 (SPEC v0.3 §4.2, with the registration index of §3.11). The SPEC states the rule; this section keeps the reasoning behind it.
 
 SPEC §4.2 requires allocation to be deterministic and publicly recomputable, with placement unknown to an ID's owner at minting time. SPEC §2 requires:
 
@@ -112,18 +119,18 @@ SPEC §4.2 requires allocation to be deterministic and publicly recomputable, wi
 - each WC to lead exactly one KWC and be a subordinate in exactly three;
 - no mutual monitoring pairs.
 
-The SPEC does not yet give an algorithm that meets all of these at once. M1 models allocation as a uniform random partition and does not depend on this proposal.
+The earlier SPEC gave no algorithm that met all of these at once. Because the inside-out shuffle keeps every assignment uniformly random, M1's uniform-partition model of seats remains exact under the adopted rule.
 
 ### 8.1 Seats: inside-out Fisher–Yates insertion
 
-1. IDs are allocated in canonical order: the order in which they are confirmed on the PoW-ID chain. Genesis IDs are allocated first, using a public launch seed in place of a beacon.
+1. IDs are allocated in canonical order: the registration index of SPEC §3.11, which follows PoW-ID confirmation order. Genesis IDs are allocated first, using a public launch seed in place of a beacon.
 2. **Seats.** Seats are numbered 0, 1, 2, …, and WC `w` is seats `10w` to `10w + 9`.
-3. **Inserting an ID.** When ID number `n` is allocated (counting from 0), compute `j = SHA256("GB/alloc" ‖ ID ‖ beacon) mod (n + 1)`, reading the hash as a 256-bit integer; the modulo bias is below 2⁻²⁰⁰. The beacon is the hash of the block a fixed number of blocks after the ID's confirmation, as in §4.2.
+3. **Inserting an ID.** When an ID is inserted while `n` seats are filled, compute `j = SHA256("GB/alloc" ‖ ID ‖ beacon) mod (n + 1)`, reading the hash as a 256-bit integer; the modulo bias is below 2⁻²⁰⁰. Without removals, `n` is the ID's registration index. The beacon is the hash of the PoW-ID block 6 blocks after the ID's confirmation (SPEC §2, [O]).
    - If `j = n`, the ID takes seat `n`.
    - Otherwise the ID in seat `j` moves to seat `n`, and the new ID takes seat `j`.
 4. **Why it is uniform.** This is the inside-out Fisher–Yates shuffle. After every step, the assignment of allocated IDs to seats is a uniformly random permutation, given uniform hash outputs.
 5. **Active and pending WCs.** A WC is active when all 10 of its seats are filled, so the number of active WCs is `W = ⌊allocated / 10⌋`. The partial tail WC is pending. Its members may mine (§3.10) but do not witness until it fills, about 5 minutes at 30 s per ID.
-6. **Removals** (ban or deactivation). The ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring (8.2) is recomputed.
+6. **Removals** (ban or deactivation). The ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring (8.2) is recomputed. A re-activated ID is re-inserted by step 3 (architect, 2026-10-06).
 
 ### 8.2 KWCs: a Golomb-ruler ring
 
@@ -136,12 +143,12 @@ For `W ≥ 13` active WCs, KWC `w` has leader WC `w` and subordinate WCs `(w + 1
 
 Everything depends only on chain data: the ID order, the beacons and the removal record. Anyone can recompute it. The CAC attests a hash of the resulting assignment but cannot choose it.
 
-### 8.3 Conflicts with the current design
+### 8.3 What it replaced
 
-- **§4.2 formula.** §4.2 writes placement as a pure per-ID function, `chain(ID) = f(SHA256(ID ‖ beacon))`. Under this proposal, placement also depends on earlier allocations, and an existing ID moves when a new ID displaces it.
-- **Fixed-membership principle.** The architect's principle is that chain membership stays fixed unless someone is banned. This proposal breaks it: every new ID changes the membership of one existing WC, and moves one existing ID into the pending tail WC.
+- **§4.2 formula.** SPEC v0.2 wrote placement as a pure per-ID function, `chain(ID) = f(SHA256(ID ‖ beacon))`. Under the adopted rule, placement also depends on earlier allocations, and an existing ID moves when a new ID displaces it.
+- **Fixed-membership principle.** The earlier principle was that chain membership stays fixed unless someone is banned. The adopted rule gives it up: every new ID changes the membership of one existing WC, and moves one existing ID into the pending tail WC.
 
-### 8.4 Security reason for accepting the conflict
+### 8.4 Security reason for the change
 
 The alternative that keeps membership fixed is **append-only** allocation: new IDs fill new WCs in arrival order, and existing WCs never change. Under append-only allocation, a new WC's composition mirrors the attacker's share of **recent issuance** (s), not its share of the **population** (p).
 
@@ -155,8 +162,8 @@ Insertion keeps every WC's composition at the population share, so the section B
 
 - **Seat changes:** each new ID changes one existing WC, and so 4 KWC compositions (a WC sits in 4 KWCs). That is 40 per new WC.
 - **Ring relinks:** each new active WC adds its own KWC and relinks the 6 KWCs whose subordinate offsets wrap around the ring. That is 7 per new WC.
-- **Total:** about 47 composition changes per new WC, against 1 for append-only.
-- **Effect on the H6 count:** the SPEC §10 counting model treats every composition as an independent draw, so the proposal raises that count. However, each changed composition differs from its predecessor by one seat, so the changes are strongly correlated. M4 should measure the effective number of independent draws rather than count raw changes.
+- **Total:** about 47 composition changes per new WC (4.7 per new ID), against 1 for append-only. A removal changes about 4.6, so a deactivation cycle changes about 9.3.
+- **Effect on the H6 count:** the SPEC §10 counting model treats every composition as an independent draw, so the adopted rule raises that count about 43-fold over ten years from 100,000 KWCs (section B4). Most changed compositions differ from their predecessor by one seat, so the changes are correlated: at p = 25% a one-seat change enters the sign-capable state with about 0.43 to 0.46 times the probability of a fresh draw. M4 should measure the number of distinct episodes rather than count raw changes.
 
 ### 8.6 Open risks
 

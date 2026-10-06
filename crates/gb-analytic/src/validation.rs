@@ -144,6 +144,29 @@ impl Check {
         }
     }
 
+    /// One-sided check: `value ≥ reference − tolerance`.
+    pub fn at_least(
+        section: &'static str,
+        check: &str,
+        description: &str,
+        reference: f64,
+        value: f64,
+        tolerance: f64,
+        samples: u64,
+    ) -> Check {
+        Check {
+            section,
+            check: check.to_string(),
+            description: description.to_string(),
+            reference,
+            value,
+            tolerance,
+            tolerance_kind: "lower bound (value ≥ reference − tolerance)",
+            samples,
+            passed: value >= reference - tolerance,
+        }
+    }
+
     /// One-sided check: `value ≤ reference + tolerance`.
     pub fn at_most(
         section: &'static str,
@@ -200,6 +223,8 @@ mod tests {
     fn upper_bound_check_is_one_sided() {
         assert!(Check::at_most("D", "x", "", 1.0, 0.5, 0.05, 10).passed);
         assert!(!Check::at_most("D", "x", "", 1.0, 1.2, 0.05, 10).passed);
+        assert!(Check::at_least("A", "x", "", 1.0, 0.999_999_999_9, 1e-9, 0).passed);
+        assert!(!Check::at_least("A", "x", "", 1.0, 0.9, 1e-9, 0).passed);
         assert!(Check::absolute("D", "x", "", 1.0, 1.04, 0.05).passed);
         assert!(Check::exact("D", "x", "", 1.0, 1.0, true).passed);
     }

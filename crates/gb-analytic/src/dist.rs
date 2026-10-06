@@ -205,6 +205,27 @@ impl JointDistribution {
         }
     }
 
+    /// Seats in the first and second group.
+    pub fn group_sizes(&self) -> (u64, u64) {
+        let first = self.numerators.len() as u64 - 1;
+        let second = self
+            .numerators
+            .first()
+            .map_or(0, |row| row.len() as u64 - 1);
+        (first, second)
+    }
+
+    /// Probability that the first group holds exactly `x` attacker seats and the second `y`.
+    pub fn pmf(&self, x: u64, y: u64) -> Q {
+        let value = self
+            .numerators
+            .get(x as usize)
+            .and_then(|row| row.get(y as usize))
+            .cloned()
+            .unwrap_or_else(BigUint::zero);
+        Q::new(BigInt::from(value), BigInt::from(self.denominator.clone()))
+    }
+
     /// Probability of the seat counts `(x, y)` for which `predicate` holds, where `x` counts
     /// attacker seats in the first group and `y` in the second.
     pub fn probability_where(&self, predicate: impl Fn(u64, u64) -> bool) -> Q {
@@ -376,6 +397,9 @@ mod tests {
             leader.at_least(7) * subs.at_least(21)
         );
         assert_eq!(joint.probability_where(|_, _| true), Q::one());
+        assert_eq!(joint.group_sizes(), (10, 30));
+        assert_eq!(joint.pmf(3, 9), leader.pmf(3) * subs.pmf(9));
+        assert_eq!(joint.pmf(11, 0), Q::zero());
     }
 
     #[test]
