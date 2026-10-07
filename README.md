@@ -1,6 +1,6 @@
 # GrahamBell — Stage 1 simulation
 
-GrahamBell is a proposed Layer 1 blockchain whose Sybil resistance comes from time rather than hardware or capital. Identities (IDs) are issued one at a time at a fixed global rate through capped Proof of Work. Each miner is limited to one hash per second, and a Witness Chain of other participants enforces the limit. An attacker can still create identities, but only as fast as the shared issuance schedule allows, so taking control of the network takes years of sustained participation. The architecture calls this **Proof of Infrastructure Endurance (PoIE)**.
+GrahamBell is a proposed Layer 1 blockchain whose Sybil resistance comes from time rather than hardware or capital. Identities (IDs) are issued one at a time at a fixed global rate through capped Proof of Work. Each miner is limited to one hash per second, and a Witness Chain of other participants enforces the limit. An attacker can still create identities, but only as fast as the shared issuance schedule allows, so taking control of the network takes years of sustained participation. The architecture calls this **Proof of Infrastructure Endurance (PoIE)** and **Proof of Time (PoT)** (A new Time-based Sybil-resistance).
 
 **Stage 1** tests whether PoIE's claims hold under realistic and adversarial conditions, and publishes the results whether they confirm or refute the model. The rules under test are in [`docs/SPEC.md`](docs/SPEC.md), the single source of truth.
 
