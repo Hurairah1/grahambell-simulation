@@ -322,7 +322,7 @@ A [P] proposal to separate PoWit validity from payment is recorded in §12 for M
 
 The adversary may: obtain arbitrary compute; acquire large IPv6 allocations; lease cloud infrastructure across many providers and autonomous systems; perform temporary routing hijacks; flood admissions; sustain long-term spending; run many witness IDs and collude; bribe; operate botnets or rent residential proxies; flood specific home nodes offline; manipulate clocks and time sources; control a share of a newcomer's peers; behave irrationally (non-profit motives).
 
-The adversary cannot: break SHA-256, BLS12-381 or VRF security; forge signatures.
+The adversary cannot: break SHA-256 or BLS12-381 security; forge signatures.
 
 ---
 
@@ -474,6 +474,7 @@ Decisions by the protocol architect, recorded after reviewing the M1.1 results.
   - three ways to raise the attacker share that ID issuance can tolerate without relying on bans: the split rule, larger KWCs and threshold BLS entropy, for M2/M4;
   - witness peer topology option 2: no persistent witness-to-witness connections, on-demand connections through the global directory, online status from the network record.
 - **§12 housekeeping.** Removed the answered questions (the re-insertion beacon, committee seats of deactivated or banned members, the Variant B form). Added the absence-duration question, the long-absence threshold, and the proposals above.
+- **§7 (editorial, 2026-10-07).** Removed VRF from §7; no VRF in the design.
 
 ### v0.3 — 2026-10-06
 
