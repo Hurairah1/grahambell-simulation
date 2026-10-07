@@ -89,7 +89,7 @@ Every run is determined by three things: the git commit, the seed and the config
 2. Run `cargo run --release -p gb-cli -- analytic --seed <seed> --config <file>` with the same seed and configuration (`config.resolved.toml` from the run directory works as the configuration file).
 3. Compare the `outputs` list in the two `run.json` files.
 
-CSV and Markdown outputs are designed to be byte-identical across machines: exact arithmetic, a pure-Rust maths library and in-repo random samplers remove the usual platform differences. A test checks byte-identity of reruns on the same machine; cross-machine identity has not yet been tested. PNG charts are byte-identical on the same platform.
+CSV and Markdown outputs are designed to be byte-identical across machines: exact arithmetic, a pure-Rust maths library and in-repo random samplers remove the usual platform differences. A test checks byte-identity of reruns on the same machine, and an independent rebuild on Linux x86_64 with rustc 1.97.0 reproduced `SUMMARY.md` (apart from its git-commit line) and `M1_PUBLIC_BRIEF.md` byte for byte. PNG charts are byte-identical on the same platform; their identity across platforms is still untested.
 
 ## Configuration
 
