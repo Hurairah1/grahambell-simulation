@@ -1,6 +1,6 @@
 # Architecture — GrahamBell Stage 1
 
-This document describes how the Stage 1 code is organised, how later milestones plug in, and how the protocol core will be shared with the Stage 3 testnet. It is a design document: crates marked *planned* below do not exist yet.
+This document describes how the Stage 1 code is organised, how later milestones plug in, how the protocol core will be shared with the Stage 3 testnet, and how releases move from the private repository to the public one. It is a design document: crates marked *planned* below do not exist yet.
 
 `docs/SPEC.md` is the source of truth for protocol rules. Nothing in this document changes a rule. The allocation algorithm in the last section began as a proposal; the architect adopted it on 2026-10-06 as SPEC §4.2 [D], and the section now records its rationale.
 
@@ -187,3 +187,20 @@ Insertion keeps every WC's composition at the population share, so the section B
 
 - **Beacon withholding.** The miner of the beacon block can withhold it to re-roll placements, at the cost of that block.
 - **Placement grinding.** An unregistered miner cannot choose its ID hash freely, because the ID is the hash of the winning PoW-ID block and §3.4 allows one header per round. The residual freedom should still be measured in M2.
+
+## 9. Release workflow (private → public)
+
+Development and publication use two repositories.
+
+| Remote | Repository | Pushing |
+|---|---|---|
+| `origin` | the private development repository | the default: all work, CI runs and reviews happen here |
+| `public` | `github.com/Hurairah1/grahambell-simulation` | disabled: its push URL is set to `DISABLED` (`git remote set-url --push public DISABLED`), so a plain push can never reach it |
+
+- **Day to day:** commits are pushed to `origin` only; `main` tracks `origin/main`.
+- **Release:** only when the architect writes the exact words "push to public":
+  1. restore the push URL: `git remote set-url --push public https://github.com/Hurairah1/grahambell-simulation.git`;
+  2. push `main` only, with `git push public main`: never another branch, never `--force`;
+  3. disable it again with `git remote set-url --push public DISABLED`, and check with `git remote -v`.
+- **Reference results:** `results/` is ignored by git except a release's reference run in `results/analytic/reference/`. It is produced by `gb analytic` from a clean commit, and its `run.json` records that commit and a SHA-256 of every file, so anyone can check out the commit, rerun the analysis and compare.
+- **Before a release push**, check the commit authors (`git log --format='%an <%ae>' | sort -u`), files over 1 MB, and anything that looks like a secret, a key or a local path.
