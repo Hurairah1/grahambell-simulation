@@ -11,13 +11,14 @@ GrahamBell is a proposed Layer 1 blockchain whose Sybil resistance comes from ti
 | M0 | done | Rust workspace, typed configuration of every SPEC parameter, run provenance, CI |
 | M1 | done | **Analytical baseline**: exact formulas and exact probabilities for issuance, witness capture, the allocation committee, the restart attack, difficulty hopping and same-step ties |
 | M1.1 | done | The architect's decisions on M1 (SPEC v0.3): 2.9M genesis IDs, adaptive-cap safety factor, count-based difficulty, committee seat lottery, adopted allocation algorithm, deactivation instead of bans. Adds the quorum trade-off (section G) and a [public brief](docs/M1_PUBLIC_BRIEF.md) |
+| M1.2 | done | The architect's decisions on M1.1 (SPEC v0.4): seats survive downtime (only bans and absences longer than L vacate them), distinct episodes as the H6 measure, placement without the committee, committee departures, conflicting decisions and proposer rights. Adds quorum feasibility under honest downtime (section H), the KWC size trade-off (section I) and the Apache 2.0 licence |
 | M2–M6 | planned | Cryptographic core, simulators, cost model, full-scale runs; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 
 M1 results are the ground truth that later simulators must reproduce before their own results are trusted. Every modelling assumption behind them is listed in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).
 
 All M1 results assume the attacker's IDs are online 100% of the time while honest IDs are online a fraction f of the time. This is a deliberate worst case; M3 adds realistic outages for both sides.
 
-For a one-to-two-page overview of what M1 found, written for a general technical audience, read [`docs/M1_PUBLIC_BRIEF.md`](docs/M1_PUBLIC_BRIEF.md).
+For a short overview of what M1 found, written for a general technical audience, read [`docs/M1_PUBLIC_BRIEF.md`](docs/M1_PUBLIC_BRIEF.md).
 
 ## Build and test
 
@@ -62,14 +63,16 @@ Inside `results/analytic/<run-id>/`:
 | File | What it holds |
 |---|---|
 | `SUMMARY.md` | Plain-English summary of every table, written for non-experts |
-| `M1_PUBLIC_BRIEF.md` | One-to-two-page brief for a general technical audience, from exact tables only; a test keeps `docs/M1_PUBLIC_BRIEF.md` identical to it |
+| `M1_PUBLIC_BRIEF.md` | Short brief for a general technical audience, from exact tables only; a test keeps `docs/M1_PUBLIC_BRIEF.md` identical to it |
 | `A1_…` to `A7_….csv` | Section A: time for an attacker to reach 33%, 51% or 67% of active IDs; online fraction; honest growth; adaptive cap with its safety factor; genesis size needed; long-run shares |
-| `B1_…` to `B4_….csv` | Section B: probability that an attacker can block, sign alone, or hold every seat of a Witness Chain group; network-level counts; binomial vs hypergeometric; 10-year counts under the adopted allocation |
-| `C1_…`, `C2_….csv` | Section C: Chain Allocation Committee stalling and capture under the seat lottery, with episode lengths and entries per year; the v0.2 rule as a comparison |
+| `B1_…` to `B5_….csv` | Section B: probability that an attacker can block, sign alone, or hold every seat of a Witness Chain group; network-level counts; binomial vs hypergeometric; 10-year episode and composition counts under the adopted allocation (B4) and under each seat rule with illustrative absences (B5) |
+| `C1_…` to `C3_….csv` | Section C: Chain Allocation Committee stalling and capture under the seat lottery, with episode lengths and entries per year; the v0.2 rule as a comparison; the effect of honest members leaving the committee when deactivated (C3) |
 | `D1_…`, `D2_….csv` | Section D: restart attack under the old and current entropy designs, including the realistic restart cost (450 s) |
 | `E1_….csv` | Section E: difficulty hopping against the Variant A comparison |
 | `F1_….csv` | Section F: same-step ties between identity blocks |
-| `G1_…` to `G3_….csv` | Section G: quorum trade-off — stalling, signing alone and conflicting approvals for each quorum option; the split rule; committee quorums |
+| `G1_…` to `G4_….csv` | Section G: quorum trade-off — stalling, signing alone and conflicting approvals for each quorum option; the split rule; committee quorums; 10-year episodes under each seat rule (G4) |
+| `H1_…` to `H3_….csv` | Section H: how often a group cannot meet its quorum when honest members are offline and attacker members withhold; the minimum honest uptime; absent IDs holding seats under each long-absence threshold L |
+| `I1_…` to `I4_….csv` | Section I: KWC size trade-off — security, liveness, load per node under three capacity policies, and on-demand witness connections under the proposed peer topology |
 | `validation.csv` | Every cross-check: reference value, tolerance, verdict |
 | `parameters.csv` | Every SPEC §2 parameter with its value, status tag and sweep |
 | `charts/*.png` | Charts drawn from the tables |
@@ -117,6 +120,7 @@ Unknown keys are rejected. A file cannot change a status tag, because status tag
 | `docs/SPEC.md` | Stage 1 specification (source of truth), with its changelog |
 | `docs/ARCHITECTURE.md` | Two-tier design, planned crates, validation ladder, rationale of the adopted allocation |
 | `docs/ASSUMPTIONS.md` | Every M1 modelling assumption, and open questions |
+| `LICENSE` | Apache License 2.0 |
 | `docs/M1_PUBLIC_BRIEF.md` | Public brief on the M1 results (generated; see above) |
 | `configs/default.toml` | Default configuration |
 | `crates/gb-config` | Typed configuration and the SPEC §2 parameter registry |
@@ -127,4 +131,4 @@ Unknown keys are rejected. A file cannot change a status tag, because status tag
 
 ## Licence
 
-No licence has been chosen yet. The bundled DejaVu Sans font (`crates/gb-cli/assets/fonts/`) is distributed under its own licence, included next to it.
+Licensed under the Apache License 2.0; see [`LICENSE`](LICENSE). The bundled DejaVu Sans font (`crates/gb-cli/assets/fonts/`) keeps its own licence, included next to it.

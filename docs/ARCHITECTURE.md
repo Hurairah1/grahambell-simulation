@@ -20,7 +20,7 @@ This document describes how the Stage 1 code is organised, how later milestones 
 |---|---|---|---|
 | `gb-config` | exists | M0 | Typed parameters for every SPEC §2 row (value, status D/P/O, sweep), M1 grids, run settings; TOML loading by deep merge over defaults. |
 | `gb-runlog` | exists | M0 | Run id, git commit and dirty flag, UTC timestamp, resolved-config hash, SHA-256 manifest of outputs, seeded ChaCha20 streams. |
-| `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–G), with independent cross-checks. Pure functions; no I/O. |
+| `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–I), with independent cross-checks. Pure functions; no I/O. |
 | `gb-cli` | exists | M0+ | Binary `gb`: loads config, runs analyses, writes CSV/PNG/SUMMARY, the public brief and the run log. Front end only; never recomputes results. |
 | `gb-protocol` | planned | M2 | Shared protocol core, listed in section 5. |
 | `gb-crypto-tests` | planned | M2 | Micro-tests with real SHA-256 and BLS12-381: S11 grinding, S14, proof of possession, equivocation, and equivalence tests for any abstraction a simulator uses. |
@@ -61,12 +61,25 @@ Each M1 table becomes a check that a later simulator must pass.
 | A4 adaptive cap (checkpoints, worst phase, safety factor k = 7/6) | M3 S7 |
 | A6 genesis to issue | M3/M6 with household downtime profiles |
 | B1–B3 per-KWC capture/stall probabilities | M4 allocation simulation (S15) at the same p and network sizes |
-| B4 KWC compositions over 10 years (adopted allocation, bans, deactivation) | M4 count of compositions, distinct episodes and the one-seat entry ratio |
+| B4 distinct episodes and compositions over 10 years (adopted allocation, bans) | M4 count of distinct episodes, with compositions and the one-seat entry ratio |
+| B5 the seat rule (v0.3 against v0.4 at each L) under illustrative absences | M4 with M3 household downtime profiles |
 | C1–C2 committee stall/capture, entries per year, episode lengths (seat lottery) | M4 S21 with the real next-position rule and registration-order layouts |
+| C3 committee departures (Little's law share) | M4 S21 simulating departures and extra draws |
 | D1 restart advantage, including the realistic cost of 450 s | M3 S5 (H4) |
 | E1 difficulty-hopping gain against the Variant A comparison | M3 S6 (H5), with Variant B's correction once proposed |
 | F1 same-step tie rate | M3 fork/orphan rate |
 | G1–G3 quorum trade-off (stall, sign alone, conflicting approvals) | M4 S15–S21 under whichever quorums the architect chooses; conflicting approvals also need the proposer rules |
+| G4 ten-year episodes under each seat rule | M4 with M3 household downtime profiles |
+| H1–H3 quorum feasibility under honest downtime, minimum uptime, absent seats per L | M3 household profiles (H7), M4 with the forced-signing and ban rules (§4.5–§4.6) |
+| I1–I4 KWC size trade-off: security, liveness, load, on-demand connections | M2 threshold BLS key setup at each size, M4, M5 household limits (router tables, upload) |
+
+**[P] proposals recorded in SPEC v0.4 §12 and where they are tested:**
+
+- separate PoWit validity from payment (any 27 of 40 is valid; an unsigned leader member's share is never generated): M4 against 7 + 21, on liveness (H), leaders' incentives and issuance per block;
+- the split rule, a lower PoWit-only quorum: M4 (G2 maps it);
+- larger KWCs: M2 and M5 (I maps them);
+- threshold BLS entropy: M2 measures the key-setup cost;
+- witness peer topology option 2 (no standing witness-to-witness connections): M3 and M5 (I4 estimates the on-demand connections).
 
 ## 5. `gb-protocol` and the Stage 3 testnet
 
@@ -78,7 +91,7 @@ Each M1 table becomes a check that a later simulator must pass.
 - **§3.6 witness signing condition** and **§3.7 validation:** quorum with bitfield and proof of possession, full chain recomputation, timestamp rules, the same-height tie-break, uniqueness.
 - **§3.8 difficulty** Variant B (default) and the Variant A comparison, and **§3.9 issuance** (fixed; adaptive with the checkpointed cap and its safety factor).
 - **§3.11 registration index** and the canonical active list.
-- **§4.2 allocation** (section 8) and the **§4.3 seat lottery**, both recomputed by every node from chain data.
+- **§4.2 allocation** (section 8), with the v0.4 seat rule, and the **§4.3 seat lottery** with its extra draws, all recomputed by every node from chain data.
 
 **Sharing.** `gb-sim` calls these functions directly, and so will the Stage 3 node. M2 produces test vectors (inputs and expected hashes, signatures and validation verdicts) that both the simulator and the testnet node must reproduce. A rule change therefore lands in one place and is caught by the vectors everywhere.
 
@@ -104,14 +117,15 @@ These [P] rules and comparisons are defined in the SPEC but not needed by M1. Th
 - sorted-hash field ordering (S14);
 - "unreachable is not refusal" vs strict One Chance (§4.6, S17);
 - diversity constraints in allocation (§4.2);
-- proposer rotation and failure behaviour (§4.4);
-- Variant B's correction from recent block times (§3.8), once proposed.
+- proposer rotation, proposer rights and failure behaviour (§4.4);
+- Variant B's correction from recent block times (§3.8), once proposed;
+- the SPEC v0.4 §12 [P] proposals: validity separate from payment, the split rule, larger KWCs, threshold BLS entropy and witness peer topology option 2.
 
-The lottery beacon offset k and the allocation beacon delay are already typed parameters (both [O]); M1 does not depend on them, because it models the draws as uniform. M2 and M4 measure what the miner of a beacon block can gain by withholding it.
+The lottery beacon offset k, the allocation beacon delay and the long-absence threshold L are already typed parameters (all [O]). M1 does not depend on the two beacon parameters, because it models the draws as uniform; M2 and M4 measure what the miner of a beacon block can gain by withholding it. L enters sections B, G and H through its sweep.
 
 ## 8. Allocation — adopted as SPEC §4.2 [D]
 
-The architect adopted this algorithm on 2026-10-06 (SPEC v0.3 §4.2, with the registration index of §3.11). The SPEC states the rule; this section keeps the reasoning behind it.
+The architect adopted this algorithm on 2026-10-06 (SPEC v0.3 §4.2, with the registration index of §3.11) and amended its removal rule on 2026-10-07 (SPEC v0.4 §4.7). The SPEC states the rule; this section keeps the reasoning behind it.
 
 SPEC §4.2 requires allocation to be deterministic and publicly recomputable, with placement unknown to an ID's owner at minting time. SPEC §2 requires:
 
@@ -130,7 +144,8 @@ The earlier SPEC gave no algorithm that met all of these at once. Because the in
    - Otherwise the ID in seat `j` moves to seat `n`, and the new ID takes seat `j`.
 4. **Why it is uniform.** This is the inside-out Fisher–Yates shuffle. After every step, the assignment of allocated IDs to seats is a uniformly random permutation, given uniform hash outputs.
 5. **Active and pending WCs.** A WC is active when all 10 of its seats are filled, so the number of active WCs is `W = ⌊allocated / 10⌋`. The partial tail WC is pending. Its members may mine (§3.10) but do not witness until it fills, about 5 minutes at 30 s per ID.
-6. **Removals** (ban or deactivation). The ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring (8.2) is recomputed. A re-activated ID is re-inserted by step 3 (architect, 2026-10-06).
+6. **Removals** (a ban, or a continuous absence longer than the long-absence threshold L; SPEC v0.4 §4.7). The ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring (8.2) is recomputed. Going offline or being deactivated does not move anyone: the absent ID keeps its seat as an offline member. A returning ID whose seat was vacated is re-inserted by step 3, with the beacon of the block 6 blocks after its re-activation is confirmed (architect, 2026-10-07).
+7. **When placement takes effect.** At the ID's beacon block, without waiting for the Allocation Committee Block, which records and attests it (SPEC v0.4 §4.2–§4.3).
 
 ### 8.2 KWCs: a Golomb-ruler ring
 
@@ -142,6 +157,8 @@ For `W ≥ 13` active WCs, KWC `w` has leader WC `w` and subordinate WCs `(w + 1
 - **30-node comparison.** Use marks `{0, 1, 3}`, so subordinates are `(w + 1)` and `(w + 3)`, and `W ≥ 7`.
 
 Everything depends only on chain data: the ID order, the beacons and the removal record. Anyone can recompute it. The CAC attests a hash of the resulting assignment but cannot choose it.
+
+Other sizes use other optimal Golomb rulers (M1 section I): {1, 3} for 3 WCs, {1, 4, 9, 11} for 5, {1, 4, 10, 12, 17} for 6, {1, 4, 9, 15, 22, 32, 34} for 8 and {1, 6, 10, 23, 26, 34, 41, 53, 55} for 10.
 
 ### 8.3 What it replaced
 
@@ -162,8 +179,9 @@ Insertion keeps every WC's composition at the population share, so the section B
 
 - **Seat changes:** each new ID changes one existing WC, and so 4 KWC compositions (a WC sits in 4 KWCs). That is 40 per new WC.
 - **Ring relinks:** each new active WC adds its own KWC and relinks the 6 KWCs whose subordinate offsets wrap around the ring. That is 7 per new WC.
-- **Total:** about 47 composition changes per new WC (4.7 per new ID), against 1 for append-only. A removal changes about 4.6, so a deactivation cycle changes about 9.3.
-- **Effect on the H6 count:** the SPEC §10 counting model treats every composition as an independent draw, so the adopted rule raises that count about 43-fold over ten years from 100,000 KWCs (section B4). Most changed compositions differ from their predecessor by one seat, so the changes are correlated: at p = 25% a one-seat change enters the sign-capable state with about 0.43 to 0.46 times the probability of a fresh draw. M4 should measure the number of distinct episodes rather than count raw changes.
+- **Total:** about 47 composition changes per new WC (4.7 per new ID), against 1 for append-only. A removal changes about 4.6, so an absence that vacates a seat and ends in a re-insertion changes about 9.3.
+- **Effect on the H6 count:** counting every composition as an independent draw, the adopted rule raises the count about 43-fold over ten years from 100,000 KWCs (section B4). Most changed compositions differ from their predecessor by one seat, so the changes are correlated: at p = 25% a one-seat change enters the sign-capable state with about 0.43 to 0.46 times the probability of a fresh draw. Since SPEC v0.4 the primary measure is the number of distinct episodes, which is about half the composition count at p = 25% (0.476 against 0.926 for the unregistered quorum).
+- **Effect of the v0.4 seat rule:** under v0.3 every absence that deactivated an ID cost about 9.3 compositions. Under v0.4 only absences longer than L do; with the illustrative inputs (4 absences per ID per year, Lomax durations) that leaves 3.6% of the v0.3 count at L = 30 days (section B5). The price is liveness: absent IDs keep their seats, which needs more honest uptime (section H).
 
 ### 8.6 Open risks
 

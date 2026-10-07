@@ -32,8 +32,10 @@ pub const TABLE_FILES: &[&str] = &[
     "B2_network_counts.csv",
     "B3_binomial_vs_hypergeometric.csv",
     "B4_kwc_compositions_10y.csv",
+    "B5_seat_rule_10y.csv",
     "C1_cac_probabilities.csv",
     "C2_cac_events_per_year.csv",
+    "C3_cac_departures.csv",
     "D1_restart_advantage.csv",
     "D2_restart_advantage_curve.csv",
     "E1_difficulty_hopping.csv",
@@ -41,39 +43,65 @@ pub const TABLE_FILES: &[&str] = &[
     "G1_quorum_kwc.csv",
     "G2_split_rule.csv",
     "G3_cac_quorum.csv",
+    "G4_quorum_10y_by_seat_rule.csv",
+    "H1_quorum_feasibility.csv",
+    "H2_minimum_uptime.csv",
+    "H3_absent_seat_share.csv",
+    "I1_kwc_size_security.csv",
+    "I2_kwc_size_liveness.csv",
+    "I3_kwc_size_load.csv",
+    "I4_on_demand_connections.csv",
     "validation.csv",
     "parameters.csv",
 ];
 
 /// Writes every M1 table, the cross-checks and the parameter listing into `dir`.
 pub fn write_tables(dir: &Path, config: &Config, results: &M1Results) -> anyhow::Result<()> {
-    let a = &results.a;
-    let b = &results.b;
-    let c = &results.c;
-    let out = |name: &str| dir.join(name);
-    write_csv(&out(TABLE_FILES[0]), &a.thresholds)?;
-    write_csv(&out(TABLE_FILES[1]), &a.online)?;
-    write_csv(&out(TABLE_FILES[2]), &a.growth)?;
-    write_csv(&out(TABLE_FILES[3]), &a.cap)?;
-    write_csv(&out(TABLE_FILES[4]), &a.safety)?;
-    write_csv(&out(TABLE_FILES[5]), &a.trajectories)?;
-    write_csv(&out(TABLE_FILES[6]), &a.genesis)?;
-    write_csv(&out(TABLE_FILES[7]), &a.long_run)?;
-    write_csv(&out(TABLE_FILES[8]), &b.kwc)?;
-    write_csv(&out(TABLE_FILES[9]), &b.network)?;
-    write_csv(&out(TABLE_FILES[10]), &b.comparison)?;
-    write_csv(&out(TABLE_FILES[11]), &b.compositions)?;
-    write_csv(&out(TABLE_FILES[12]), &c.odds)?;
-    write_csv(&out(TABLE_FILES[13]), &c.events)?;
-    write_csv(&out(TABLE_FILES[14]), &results.d)?;
-    write_csv(&out(TABLE_FILES[15]), &results.d_curve)?;
-    write_csv(&out(TABLE_FILES[16]), &results.e)?;
-    write_csv(&out(TABLE_FILES[17]), &results.f)?;
-    write_csv(&out(TABLE_FILES[18]), &results.g.quorum)?;
-    write_csv(&out(TABLE_FILES[19]), &results.g.split)?;
-    write_csv(&out(TABLE_FILES[20]), &results.g.cac)?;
-    write_csv(&out(TABLE_FILES[21]), &results.checks)?;
-    write_csv(&out(TABLE_FILES[22]), &parameter_listing(config)?)?;
+    let r = results;
+    let mut written: Vec<&str> = Vec::new();
+    macro_rules! table {
+        ($name:literal, $rows:expr) => {{
+            write_csv(&dir.join($name), $rows)?;
+            written.push($name);
+        }};
+    }
+    table!("A1_time_to_threshold.csv", &r.a.thresholds);
+    table!("A2_online_fraction.csv", &r.a.online);
+    table!("A3_honest_growth.csv", &r.a.growth);
+    table!("A4_adaptive_cap.csv", &r.a.cap);
+    table!("A4_safety_factor.csv", &r.a.safety);
+    table!("A5_share_trajectories.csv", &r.a.trajectories);
+    table!("A6_genesis_to_issue.csv", &r.a.genesis);
+    table!("A7_long_run_share.csv", &r.a.long_run);
+    table!("B1_kwc_probabilities.csv", &r.b.kwc);
+    table!("B2_network_counts.csv", &r.b.network);
+    table!("B3_binomial_vs_hypergeometric.csv", &r.b.comparison);
+    table!("B4_kwc_compositions_10y.csv", &r.b.compositions);
+    table!("B5_seat_rule_10y.csv", &r.b.seat_rule);
+    table!("C1_cac_probabilities.csv", &r.c.odds);
+    table!("C2_cac_events_per_year.csv", &r.c.events);
+    table!("C3_cac_departures.csv", &r.c.departures);
+    table!("D1_restart_advantage.csv", &r.d);
+    table!("D2_restart_advantage_curve.csv", &r.d_curve);
+    table!("E1_difficulty_hopping.csv", &r.e);
+    table!("F1_tie_rate.csv", &r.f);
+    table!("G1_quorum_kwc.csv", &r.g.quorum);
+    table!("G2_split_rule.csv", &r.g.split);
+    table!("G3_cac_quorum.csv", &r.g.cac);
+    table!("G4_quorum_10y_by_seat_rule.csv", &r.g.seat_rule);
+    table!("H1_quorum_feasibility.csv", &r.h.feasibility);
+    table!("H2_minimum_uptime.csv", &r.h.minimum_uptime);
+    table!("H3_absent_seat_share.csv", &r.h.absent_seats);
+    table!("I1_kwc_size_security.csv", &r.i.security);
+    table!("I2_kwc_size_liveness.csv", &r.i.liveness);
+    table!("I3_kwc_size_load.csv", &r.i.load);
+    table!("I4_on_demand_connections.csv", &r.i.on_demand);
+    table!("validation.csv", &r.checks);
+    table!("parameters.csv", &parameter_listing(config)?);
+    anyhow::ensure!(
+        written == TABLE_FILES,
+        "the tables written differ from TABLE_FILES"
+    );
     Ok(())
 }
 

@@ -18,6 +18,7 @@
 
 use gb_analytic::M1Results;
 use gb_analytic::cac::CommitteeModel;
+use gb_analytic::quorum_feasibility::{REGISTERED, UNREGISTERED};
 use gb_analytic::quorum_tradeoff::POOL_LAYOUT;
 use gb_analytic::restart::REALISTIC_COST;
 use gb_analytic::time_threshold::CAP_WITH_SAFETY_FACTOR;
@@ -449,6 +450,7 @@ pub const CHART_FILES: &[&str] = &[
     "C1_cac_probabilities.png",
     "D1_restart_advantage.png",
     "G1_quorum_tradeoff.png",
+    "H1_quorum_feasibility.png",
 ];
 
 /// Draws every chart into `dir`.
@@ -465,6 +467,7 @@ pub fn draw_all(dir: &Path, results: &M1Results) -> anyhow::Result<()> {
         cac_probabilities(results),
         restart_advantage(results),
         quorum_tradeoff(results),
+        quorum_feasibility(results),
     ];
     for (name, figure) in CHART_FILES.iter().zip(figures) {
         draw_figure(&dir.join(name), &figure)?;
@@ -781,51 +784,57 @@ fn kwc_compositions(results: &M1Results) -> Figure {
         .b
         .compositions
         .iter()
-        .filter(|r| {
-            r.initial_kwcs == 100_000
-                && r.ban_rate_per_year == 0.0
-                && r.deactivation_cycles_per_id_per_year == 0.0
-        })
+        .filter(|r| r.initial_kwcs == 100_000 && r.ban_rate_per_year == 0.0)
         .collect();
-    let series = [
+    let kinds = [
         ("registered", "registered quorum (7 + 21)"),
         (
             "unregistered",
             "unregistered quorum (27 of 40), used by PoW-ID",
         ),
-    ]
-    .iter()
-    .zip(CATEGORICAL)
-    .map(|((kind, label), color)| Series {
-        label: label.to_string(),
-        points: log10_points(
-            rows.iter()
-                .filter(|r| r.miner_kind == *kind)
-                .map(|r| (r.attacker_fraction, r.expected_sign_capable)),
-        ),
-        color,
-        markers: true,
-    })
-    .collect();
+    ];
+    let panel = |title: &str, episodes: bool| Panel {
+        title: title.to_string(),
+        x_label: "attacker fraction of registered IDs, p".to_string(),
+        y_label: "expected count (log scale)".to_string(),
+        x_scale: Scale::Linear,
+        y_scale: Scale::Log10,
+        series: kinds
+            .iter()
+            .zip(CATEGORICAL)
+            .map(|((kind, label), color)| Series {
+                label: label.to_string(),
+                points: log10_points(rows.iter().filter(|r| r.miner_kind == *kind).map(|r| {
+                    let y = if episodes {
+                        r.expected_sign_episodes
+                    } else {
+                        r.expected_sign_compositions_upper_bound
+                    };
+                    (r.attacker_fraction, y)
+                })),
+                color,
+                markers: true,
+            })
+            .collect(),
+        references: vec![Reference {
+            label: "1 expected".to_string(),
+            value: 0.0,
+        }],
+        legend: SeriesLabelPosition::LowerRight,
+        y_range: None,
+    };
     let horizon = rows.first().map(|r| r.horizon_years).unwrap_or(10.0);
     Figure {
-        title: format!("Expected KWC compositions able to sign without honest members over {} years", compact_number(horizon)),
-        subtitle: "SPEC §10 H6 refresh model under the adopted allocation (SPEC §4.2): 100,000 KWCs at the start, about 4.7 compositions per new ID, no bans, no deactivation.".to_string(),
-        panels: vec![Panel {
-            title: "Expected compositions in state (ii) (log scale)".to_string(),
-            x_label: "attacker fraction of registered IDs, p".to_string(),
-            y_label: "expected compositions".to_string(),
-            x_scale: Scale::Linear,
-            y_scale: Scale::Log10,
-            series,
-            references: vec![Reference {
-                label: "1 expected".to_string(),
-                value: 0.0,
-            }],
-            legend: SeriesLabelPosition::LowerRight,
-            y_range: None,
-        }],
-        size: (1200, 760),
+        title: format!(
+            "KWCs able to sign without honest members over {} years",
+            compact_number(horizon)
+        ),
+        subtitle: "Adopted allocation (SPEC §4.2), 100,000 KWCs at the start, no bans or absences. Episodes count entries into the state (SPEC v0.4); compositions count every changed KWC and bound them from above.".to_string(),
+        panels: vec![
+            panel("Distinct episodes (primary measure)", true),
+            panel("Compositions in the state (upper bound)", false),
+        ],
+        size: (1700, 680),
     }
 }
 
@@ -1009,6 +1018,70 @@ fn quorum_tradeoff(results: &M1Results) -> Figure {
             }),
         ],
         size: (1800, 640),
+    }
+}
+
+fn quorum_feasibility(results: &M1Results) -> Figure {
+    let rows = &results.h.feasibility;
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let colors = ramp(fractions.len());
+    let panel = |layout: &str, title: String| Panel {
+        title,
+        x_label: "honest members online, f".to_string(),
+        y_label: "share of KWCs that cannot meet quorum (log scale)".to_string(),
+        x_scale: Scale::Linear,
+        y_scale: Scale::Log10,
+        series: fractions
+            .iter()
+            .zip(colors.iter().cycle())
+            .map(|(p, color)| Series {
+                label: if *p == 0.0 {
+                    "no attacker".to_string()
+                } else {
+                    format!("attacker share p = {}", percent(*p))
+                },
+                points: rows
+                    .iter()
+                    .filter(|r| r.layout == layout && r.attacker_fraction == *p)
+                    .map(|r| (r.online_fraction, r.log10_p_fail))
+                    .filter(|(_, y)| y.is_finite())
+                    .collect(),
+                color: *color,
+                markers: true,
+            })
+            .collect(),
+        references: vec![
+            Reference {
+                label: "1%".to_string(),
+                value: -2.0,
+            },
+            Reference {
+                label: "0.1%".to_string(),
+                value: -3.0,
+            },
+        ],
+        legend: SeriesLabelPosition::LowerLeft,
+        y_range: None,
+    };
+    let approvals = |layout: &str| {
+        rows.iter()
+            .find(|r| r.layout == layout)
+            .map_or(String::new(), |r| r.approvals.clone())
+    };
+    Figure {
+        title: "How often a KWC cannot meet its quorum".to_string(),
+        subtitle: "Exact. Each honest member is online with probability f; attacker members never sign. This is also the share of miners affected. A single 27-of-40 registered rule would give the left panel.".to_string(),
+        panels: vec![
+            panel(
+                UNREGISTERED,
+                format!("Unregistered PoWit ({})", approvals(UNREGISTERED)),
+            ),
+            panel(
+                REGISTERED,
+                format!("Registered PoWit, SPEC ({})", approvals(REGISTERED)),
+            ),
+        ],
+        size: (1700, 680),
     }
 }
 

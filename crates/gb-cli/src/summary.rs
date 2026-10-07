@@ -6,13 +6,17 @@
 
 use crate::charts::{compact_number, short_count, superscript};
 use gb_analytic::M1Results;
+use gb_analytic::allocation::{SeatRule, absence_models};
 use gb_analytic::cac::{CommitteeModel, OddsRow};
-use gb_analytic::quorum_tradeoff::{POOL_LAYOUT, QuorumRow, REGISTERED_LAYOUT};
-use gb_analytic::restart::REALISTIC_COST;
+use gb_analytic::kwc_size::{LoadPolicy, SectionI, policy_c_registered};
+use gb_analytic::quorum_feasibility::{AbsentSeatRow, REGISTERED, SectionH, UNREGISTERED};
+use gb_analytic::quorum_tradeoff::{POOL_LAYOUT, QuorumRow, REGISTERED_LAYOUT, SeatRuleQuorumRow};
+use gb_analytic::restart::{REALISTIC_COST, realistic_restart_cost_s};
 use gb_analytic::time_threshold::{CAP_CONFIGURED, CAP_WITH_SAFETY_FACTOR, CapRow};
 use gb_analytic::validation::Check;
-use gb_analytic::witness::KwcState;
+use gb_analytic::witness::{CompositionRow, KwcState, SeatRuleRow};
 use gb_config::Config;
+use std::collections::BTreeMap;
 
 /// The worst-case disclosure required at the top of section 1 (architect, 2026-10-06).
 pub const DISCLOSURE: &str = "All M1 results assume the attacker's IDs are online 100% of the time while honest IDs are online a fraction f of the time. This is a deliberate worst case; M3 adds realistic outages for both sides.";
@@ -38,12 +42,14 @@ pub fn render(config: &Config, results: &M1Results, provenance: &Provenance) -> 
     majority_issuance(&mut out, results);
     worst_case(&mut out, config, results);
     honest_growth(&mut out, results);
-    witness_chains(&mut out, results);
+    witness_chains(&mut out, config, results);
     committee(&mut out, config, results);
     restart(&mut out, results);
     hopping(&mut out, results);
     ties(&mut out, results);
-    quorum_tradeoff(&mut out, results);
+    quorum_tradeoff(&mut out, config, results);
+    quorum_feasibility(&mut out, config, results);
+    kwc_size_tradeoff(&mut out, config, results);
     cross_checks(&mut out, results);
     closing(&mut out);
     out
@@ -198,7 +204,7 @@ fn header(out: &mut String, config: &Config, provenance: &Provenance) {
     blank(out);
     line(
         out,
-        "These results are exact calculations: closed-form formulas and exact probabilities. They are not a simulation of the network. Seeded Monte Carlo runs appear only as cross-checks of the formulas (section 11). Every number below comes from a CSV table in this directory, and every modelling assumption is listed in `docs/ASSUMPTIONS.md`.",
+        "These results are exact calculations: closed-form formulas and exact probabilities. They are not a simulation of the network. Seeded Monte Carlo runs appear only as cross-checks of the formulas (section 13). Every number below comes from a CSV table in this directory, and every modelling assumption is listed in `docs/ASSUMPTIONS.md`.",
     );
     blank(out);
     line(
@@ -696,7 +702,7 @@ fn honest_growth(out: &mut String, results: &M1Results) {
     table(out, &headers, &body);
 }
 
-fn witness_chains(out: &mut String, results: &M1Results) {
+fn witness_chains(out: &mut String, config: &Config, results: &M1Results) {
     line(
         out,
         "## 5. Witness Chains: chance an attacker controls a KWC",
@@ -704,7 +710,7 @@ fn witness_chains(out: &mut String, results: &M1Results) {
     blank(out);
     line(
         out,
-        "Tables `B1_kwc_probabilities.csv`, `B2_network_counts.csv`, `B3_binomial_vs_hypergeometric.csv`, `B4_kwc_compositions_10y.csv`; charts `B1_kwc_probabilities.png`, `B4_kwc_compositions_10y.png`. The attacker controls a fraction p of registered IDs, and seats are assigned uniformly at random. A 40-node KWC is a 10-seat leader WC plus 30 subordinate seats.",
+        "Tables `B1_kwc_probabilities.csv`, `B2_network_counts.csv`, `B3_binomial_vs_hypergeometric.csv`, `B4_kwc_compositions_10y.csv`, `B5_seat_rule_10y.csv`; charts `B1_kwc_probabilities.png`, `B4_kwc_compositions_10y.png`. The attacker controls a fraction p of registered IDs, and seats are assigned uniformly at random. A 40-node KWC is a 10-seat leader WC plus 30 subordinate seats.",
     );
     blank(out);
     line(
@@ -748,6 +754,7 @@ fn witness_chains(out: &mut String, results: &M1Results) {
     kwc_probability_table(out, results);
     kwc_network_table(out, results);
     kwc_ten_year_table(out, results);
+    seat_rule_table(out, config, results);
     kwc_model_comparison(out, results);
 }
 
@@ -848,54 +855,52 @@ fn count(scientific: &str) -> String {
     }
 }
 
+/// A count from an `f64`, written as [`count`] writes exact strings.
+fn num(value: f64) -> String {
+    count(&format!("{value:e}"))
+}
+
 fn kwc_ten_year_table(out: &mut String, results: &M1Results) {
     let rows = &results.b.compositions;
     let horizon = rows.first().map(|r| r.horizon_years).unwrap_or(10.0);
-    let base: Vec<_> = rows
+    let base: Vec<&CompositionRow> = rows
         .iter()
-        .filter(|r| {
-            r.initial_kwcs == 100_000
-                && r.ban_rate_per_year == 0.0
-                && r.deactivation_cycles_per_id_per_year == 0.0
-        })
+        .filter(|r| r.initial_kwcs == 100_000 && r.ban_rate_per_year == 0.0)
         .collect();
     let Some(first) = base.first() else {
         return;
     };
-    let (compositions, v02) = (first.compositions, first.compositions_v02_comparison);
     line(
         out,
         &format!(
-            "**Expected KWC compositions in state (ii) over {} years** (table `B4_kwc_compositions_10y.csv`; SPEC §10 H6 refresh model). Every composition counts as an independent draw. Under the adopted allocation (SPEC §4.2) each new ID changes one existing WC, so the 4 KWCs it sits in, and one new ID in 10 completes a WC whose KWC forms while 6 others relink: about 4.7 compositions per new ID. With 100,000 KWCs at the start, no bans and no deactivation, that is {} compositions, {} times the v0.2 count of one new KWC per 10 new IDs ({}), shown for comparison:",
+            "**KWCs able to sign without honest members over {} years** (table `B4_kwc_compositions_10y.csv`, chart `B4_kwc_compositions_10y.png`; SPEC v0.4 §10 H6). The primary measure is the expected number of **distinct episodes**: an episode starts when a change of membership moves a KWC into state (ii), and lasts while it stays there. Under the adopted allocation (SPEC §4.2) each new ID changes one existing WC, so the 4 KWCs it sits in, and one new ID in 10 completes a WC whose KWC forms while 6 others relink: about 4.7 changed compositions per new ID. With 100,000 KWCs at the start and no bans or absences, that is {} compositions. Counting every composition as an independent draw, as M1.1 did, gives an upper bound on episodes. The v0.2 count, one new KWC per 10 new IDs ({} compositions), is a comparison:",
             compact_number(horizon),
-            compact_number(compositions),
-            sig3(compositions / v02),
-            compact_number(v02)
+            compact_number(first.compositions),
+            compact_number(first.compositions_v02_comparison)
         ),
     );
     blank(out);
     let fractions = distinct(base.iter().map(|r| r.attacker_fraction));
+    let get = |p: f64, kind: &str, pick: fn(&CompositionRow) -> f64| {
+        base.iter()
+            .find(|r| r.attacker_fraction == p && r.miner_kind == kind)
+            .map_or("—".to_string(), |r| num(pick(r)))
+    };
     let body: Vec<Vec<String>> = fractions
         .iter()
         .map(|p| {
-            let get = |kind: &str, v02: bool| {
-                base.iter()
-                    .find(|r| r.attacker_fraction == *p && r.miner_kind == kind)
-                    .map_or("—".to_string(), |r| {
-                        let value = if v02 {
-                            r.expected_sign_capable_v02_comparison
-                        } else {
-                            r.expected_sign_capable
-                        };
-                        count(&format!("{value:e}"))
-                    })
-            };
             vec![
                 share(*p),
-                get("registered", false),
-                get("unregistered", false),
-                get("registered", true),
-                get("unregistered", true),
+                get(*p, "registered", |r| r.expected_sign_episodes),
+                get(*p, "unregistered", |r| r.expected_sign_episodes),
+                get(*p, "registered", |r| {
+                    r.expected_sign_compositions_upper_bound
+                }),
+                get(*p, "unregistered", |r| {
+                    r.expected_sign_compositions_upper_bound
+                }),
+                get(*p, "registered", |r| r.expected_sign_v02_comparison),
+                get(*p, "unregistered", |r| r.expected_sign_v02_comparison),
             ]
         })
         .collect();
@@ -903,69 +908,179 @@ fn kwc_ten_year_table(out: &mut String, results: &M1Results) {
         out,
         &strings(&[
             "p",
-            "registered quorum (PoW-Tx)",
-            "unregistered quorum (PoW-ID)",
-            "registered, v0.2 count",
-            "unregistered, v0.2 count",
+            "episodes, registered quorum (PoW-Tx)",
+            "episodes, unregistered quorum (PoW-ID)",
+            "upper bound, registered",
+            "upper bound, unregistered",
+            "v0.2 count, registered",
+            "v0.2 count, unregistered",
         ]),
         &body,
     );
-    let ratio_at = |kind: &str| {
+    let at = |kind: &str| {
         base.iter()
             .find(|r| r.attacker_fraction == 0.25 && r.miner_kind == kind)
-            .map(|r| r.one_seat_entry_ratio)
     };
-    if let (Some(registered), Some(unregistered)) =
-        (ratio_at("registered"), ratio_at("unregistered"))
-    {
+    if let (Some(registered), Some(unregistered)) = (at("registered"), at("unregistered")) {
         line(
             out,
             &format!(
-                "Every allocation keeps each composition a uniformly random draw, so by linearity of expectation these counts hold whatever the correlation between compositions. But most consecutive compositions share all but one seat, so one KWC staying in state (ii) across several changes is counted several times. At p = 25% a one-seat change enters state (ii) with {} (registered) and {} (unregistered) times the probability of a fresh draw (column `one_seat_entry_ratio`). M4 measures the number of distinct episodes.",
-                sig3(registered),
-                sig3(unregistered)
+                "Episodes are fewer than compositions because consecutive compositions of a KWC share all but one seat. At p = 25% a one-seat change enters state (ii) with {} (registered) and {} (unregistered) times the probability of a fresh draw (column `one_seat_entry_ratio`); the unregistered count is {} episodes against an upper bound of {}.",
+                sig3(registered.one_seat_entry_ratio),
+                sig3(unregistered.one_seat_entry_ratio),
+                num(unregistered.expected_sign_episodes),
+                num(unregistered.expected_sign_compositions_upper_bound)
             ),
         );
         blank(out);
     }
-    let sensitivity = |ban: f64, cycles: f64| {
-        rows.iter()
-            .find(|r| {
-                r.initial_kwcs == 100_000
-                    && r.ban_rate_per_year == ban
-                    && r.deactivation_cycles_per_id_per_year == cycles
-            })
-            .map(|r| r.compositions)
-    };
-    let bans = distinct(rows.iter().map(|r| r.ban_rate_per_year));
-    let cycles = distinct(rows.iter().map(|r| r.deactivation_cycles_per_id_per_year));
-    let mut parts = Vec::new();
-    for ban in bans.iter().filter(|b| **b > 0.0) {
-        if let Some(c) = sensitivity(*ban, 0.0) {
-            parts.push(format!(
-                "{} of registered IDs banned per year gives {} compositions",
-                share(*ban),
-                compact_number(c)
-            ));
-        }
-    }
-    for cycle in cycles.iter().filter(|c| **c > 0.0) {
-        if let Some(c) = sensitivity(0.0, *cycle) {
-            parts.push(format!(
-                "{} deactivation cycle{} per ID per year gives {}",
-                compact_number(*cycle),
-                if *cycle == 1.0 { "" } else { "s" },
-                compact_number(c)
-            ));
-        }
-    }
+    let bans: Vec<f64> = distinct(rows.iter().map(|r| r.ban_rate_per_year))
+        .into_iter()
+        .filter(|b| *b > 0.0)
+        .collect();
+    let parts: Vec<String> = bans
+        .iter()
+        .filter_map(|ban| {
+            rows.iter()
+                .find(|r| {
+                    r.initial_kwcs == 100_000
+                        && r.ban_rate_per_year == *ban
+                        && r.miner_kind == "unregistered"
+                        && r.attacker_fraction == 0.25
+                })
+                .map(|r| {
+                    format!(
+                        "{} of registered IDs banned per year gives {} compositions and {} unregistered episodes at p = 25%",
+                        share(*ban),
+                        compact_number(r.compositions),
+                        num(r.expected_sign_episodes)
+                    )
+                })
+        })
+        .collect();
     if !parts.is_empty() {
         line(
             out,
             &format!(
-                "Sensitivities: {}. Expected counts scale by the same factor. Under SPEC v0.3 a deactivated ID vacates its seat and a re-activated ID is re-inserted, so household downtime changes compositions (about 9.3 per cycle); the cycle rates are illustrative until M3 provides downtime profiles.",
+                "Ban sensitivities, without absences: {}. Each ban is a removal, about 4.6 changed compositions.",
                 parts.join("; ")
             ),
+        );
+        blank(out);
+    }
+}
+
+fn seat_rule_table(out: &mut String, config: &Config, results: &M1Results) {
+    let rows = &results.b.seat_rule;
+    let models = absence_models(config);
+    let (Some(primary), Some(comparison)) = (models.first(), models.get(1)) else {
+        return;
+    };
+    let absence = &config.analytic.absence;
+    let slice = |model: &str, c: f64| -> Vec<&SeatRuleRow> {
+        rows.iter()
+            .filter(|r| {
+                r.miner_kind == "unregistered"
+                    && r.attacker_fraction == 0.25
+                    && r.initial_kwcs == 100_000
+                    && r.duration_model == model
+                    && r.absences_per_id_per_year == c
+            })
+            .collect()
+    };
+    let median = absence.duration_scale_days * (libm::pow(2.0, 1.0 / absence.duration_shape) - 1.0);
+    line(
+        out,
+        &format!(
+            "**Seat rule (SPEC v0.4 §4.7)** (table `B5_seat_rule_10y.csv`). Going offline no longer changes seats: an absent or deactivated ID keeps its seat as an offline member, and a seat is vacated only on a ban or after a continuous absence longer than the threshold L. Under v0.3 every absence that deactivated an ID vacated its seat and the ID was re-inserted on return, about 9.3 changed compositions per absence. The absences here are illustrative until M3 supplies household profiles: c absences per ID per year, each long enough to deactivate the ID, with Lomax durations (scale {} days, shape {}: median {} days; {} of absences last longer than 30 days) and, as a comparison, exponential durations with mean {} days. At 100,000 KWCs and p = 25%, unregistered quorum, Lomax durations:",
+            compact_number(absence.duration_scale_days),
+            compact_number(absence.duration_shape),
+            sig3(median),
+            pct(primary.survival(30.0)),
+            compact_number(absence.comparison_exponential_mean_days)
+        ),
+    );
+    blank(out);
+    let rates = &absence.absences_per_id_per_year;
+    let mut rules: Vec<String> = Vec::new();
+    for r in rows {
+        if !rules.contains(&r.seat_rule) {
+            rules.push(r.seat_rule.clone());
+        }
+    }
+    let mut headers = strings(&["seat rule", "L in PoW-ID blocks", "absences that vacate"]);
+    for c in rates {
+        headers.push(format!(
+            "c = {}: compositions (share of v0.3)",
+            compact_number(*c)
+        ));
+        headers.push(format!("c = {}: episodes", compact_number(*c)));
+    }
+    let body: Vec<Vec<String>> = rules
+        .iter()
+        .filter_map(|rule| {
+            let cells: Vec<&SeatRuleRow> = rates
+                .iter()
+                .filter_map(|c| {
+                    slice(primary.label(), *c)
+                        .into_iter()
+                        .find(|r| r.seat_rule == *rule)
+                })
+                .collect();
+            let first = cells.first()?;
+            let mut row = vec![
+                rule.clone(),
+                first
+                    .long_absence_blocks
+                    .map_or("—".to_string(), compact_number),
+                pct(first.vacating_absences_per_id_per_year / first.absences_per_id_per_year),
+            ];
+            for r in &cells {
+                row.push(format!(
+                    "{} ({})",
+                    compact_number(r.compositions),
+                    pct(r.compositions_ratio_to_v03)
+                ));
+                row.push(num(r.expected_sign_episodes));
+            }
+            Some(row)
+        })
+        .collect();
+    table(out, &headers, &body);
+    let default_days = config.offline.long_absence_threshold_s.value / 86_400.0;
+    let default_rule = SeatRule::V04 {
+        long_absence_days: default_days,
+    }
+    .label();
+    let c_max = rates.iter().copied().fold(0.0, f64::max);
+    let find = |model: &str| {
+        slice(model, c_max)
+            .into_iter()
+            .find(|r| r.seat_rule == default_rule)
+    };
+    if let (Some(lomax), Some(exponential)) = (find(primary.label()), find(comparison.label())) {
+        line(
+            out,
+            &format!(
+                "With exponential durations fewer absences are long: at the default L = {} days, {} of absences vacate a seat against {} under Lomax, and compositions at c = {} are {} of the v0.3 count (Lomax: {}).",
+                compact_number(default_days),
+                pct(exponential.vacating_absences_per_id_per_year / c_max),
+                pct(lomax.vacating_absences_per_id_per_year / c_max),
+                compact_number(c_max),
+                pct(exponential.compositions_ratio_to_v03),
+                pct(lomax.compositions_ratio_to_v03)
+            ),
+        );
+        blank(out);
+    }
+    let similar = rows.iter().all(|r| {
+        r.compositions_ratio_to_v03 > 0.0
+            && (r.episodes_ratio_to_v03 / r.compositions_ratio_to_v03 - 1.0).abs() < 0.1
+    });
+    if similar {
+        line(
+            out,
+            "In every row of table B5, episodes fall by the same factor as compositions to within 10% (column `episodes_ratio_to_v03`).",
         );
         blank(out);
     }
@@ -1103,7 +1218,7 @@ fn committee(out: &mut String, config: &Config, results: &M1Results) {
     line(
         out,
         &format!(
-            "Tables `C1_cac_probabilities.csv`, `C2_cac_events_per_year.csv`; chart `C1_cac_probabilities.png`. Under SPEC v0.3 §4.3 a new member joins for every 10th PoW-Tx block by a lottery over the canonical active list ({} active IDs here); a draw that lands on a member moves to the next position. With the attacker's IDs spread through the list, its seat count is hypergeometric, so its expected committee share equals its share p of active IDs. Mining power plays no part. An Allocation Committee Block needs ⌈2n/3⌉ approvals; the attacker stalls with n − ⌈2n/3⌉ + 1 seats and approves alone with ⌈2n/3⌉.",
+            "Tables `C1_cac_probabilities.csv`, `C2_cac_events_per_year.csv`; chart `C1_cac_probabilities.png`. Under SPEC §4.3 a new member joins for every 10th PoW-Tx block by a lottery over the canonical active list ({} active IDs here); a draw that lands on a member moves to the next position. With the attacker's IDs spread through the list, its seat count is hypergeometric, so its expected committee share equals its share p of active IDs. Mining power plays no part. An Allocation Committee Block needs ⌈2n/3⌉ approvals; the attacker stalls with n − ⌈2n/3⌉ + 1 seats and approves alone with ⌈2n/3⌉.",
             short_count(active)
         ),
     );
@@ -1152,6 +1267,7 @@ fn committee(out: &mut String, config: &Config, results: &M1Results) {
     }
     committee_events(out, config, results);
     committee_sensitivities(out, config, results);
+    committee_departures(out, results);
 }
 
 fn committee_events(out: &mut String, config: &Config, results: &M1Results) {
@@ -1169,7 +1285,7 @@ fn committee_events(out: &mut String, config: &Config, results: &M1Results) {
     line(
         out,
         &format!(
-            "**Stalls and captures over time at n = {size}** ({} refreshes per year, one every {} s). Primary measures: the share of time in each state and the exact number of entries into it per year; the mean episode length is the first divided by the second. Stalling is accepted for now (SPEC §4.3): allocation is deterministic, so a stalled committee delays the announcement of placements but cannot change them. The M1 brief's estimate (one independent composition per n refreshes) is the last column, for comparison only.",
+            "**Stalls and captures over time at n = {size}** ({} refreshes per year, one every {} s). Primary measures: the share of time in each state and the exact number of entries into it per year; the mean episode length is the first divided by the second. Since SPEC v0.4 placement takes effect at each ID's beacon block without the committee (§4.2): the Allocation Committee Block is a record and attestation, so a stall delays that record and the compilation of approved bans, never a placement. The M1 brief's estimate (one independent composition per n refreshes) is the last column, for comparison only.",
             compact_number(first.refreshes_per_year),
             compact_number(first.seconds_per_refresh)
         ),
@@ -1275,6 +1391,71 @@ fn committee_sensitivities(out: &mut String, config: &Config, results: &M1Result
             ),
         );
         blank(out);
+    }
+}
+
+fn committee_departures(out: &mut String, results: &M1Results) {
+    let rows = &results.c.departures;
+    let Some(first) = rows.first() else {
+        return;
+    };
+    let rates = distinct(rows.iter().map(|r| r.absences_per_id_per_year));
+    let c_max = rates.iter().copied().fold(0.0, f64::max);
+    line(
+        out,
+        &format!(
+            "**Departures (SPEC v0.4 §4.3)** (table `C3_cac_departures.csv`). A banned or deactivated member now leaves the committee at once, and an extra lottery draw fills its seat at the next 10th PoW-Tx block. Attacker IDs never go offline, so honest members serve shorter tenures on average and the attacker's seat share rises a little. By Little's law the share becomes p / (p + (1 − p)·r), where r is an honest member's mean tenure relative to the full tenure of n refreshes ({} h at n = {}). This is an approximation; M4 simulates the committee. Attacker share p of active IDs, c absences per honest ID per year:",
+            sig3(first.tenure_hours),
+            first.committee_size
+        ),
+    );
+    blank(out);
+    let mut headers = vec!["p".to_string()];
+    headers.extend(
+        rates
+            .iter()
+            .map(|c| format!("seat share, c = {}", compact_number(*c))),
+    );
+    headers.push("P(stall) at p".to_string());
+    headers.push(format!("P(stall), c = {}", compact_number(c_max)));
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let body: Vec<Vec<String>> = fractions
+        .iter()
+        .map(|p| {
+            let at = |c: f64| {
+                rows.iter()
+                    .find(|r| r.attacker_fraction == *p && r.absences_per_id_per_year == c)
+            };
+            let mut row = vec![share(*p)];
+            row.extend(rates.iter().map(|c| {
+                at(*c).map_or("—".to_string(), |r| {
+                    format!("{:.2}%", 100.0 * r.effective_attacker_share)
+                })
+            }));
+            row.push(at(c_max).map_or("—".to_string(), |r| prob(&r.p_stall_at_p)));
+            row.push(at(c_max).map_or("—".to_string(), |r| prob(&r.p_stall_at_effective_share)));
+            row
+        })
+        .collect();
+    table(out, &headers, &body);
+    let quarter = rows
+        .iter()
+        .find(|r| r.attacker_fraction == 0.25 && r.absences_per_id_per_year == c_max);
+    if let Some(r) = quarter {
+        let between_absences = 24.0 * 365.0 / c_max;
+        if r.tenure_hours < 0.1 * between_absences {
+            line(
+                out,
+                &format!(
+                    "At p = 25% and {} absences per ID per year the attacker's share moves from 25% to {:.2}%: a full tenure ({} h) is short compared with the time between absences ({} h).",
+                    compact_number(c_max),
+                    100.0 * r.effective_attacker_share,
+                    sig3(r.tenure_hours),
+                    compact_number(between_absences)
+                ),
+            );
+            blank(out);
+        }
     }
 }
 
@@ -1481,7 +1662,7 @@ fn option_label(row: &QuorumRow) -> String {
     }
 }
 
-fn quorum_tradeoff(out: &mut String, results: &M1Results) {
+fn quorum_tradeoff(out: &mut String, config: &Config, results: &M1Results) {
     let g = &results.g;
     let Some(kwcs) = g.quorum.iter().map(|r| r.kwcs).min() else {
         return;
@@ -1490,7 +1671,7 @@ fn quorum_tradeoff(out: &mut String, results: &M1Results) {
     blank(out);
     line(
         out,
-        "Tables `G1_quorum_kwc.csv`, `G2_split_rule.csv`, `G3_cac_quorum.csv`; chart `G1_quorum_tradeoff.png`. This section changes no SPEC quorum. For each quorum fraction q it shows what an attacker holding a fraction p of the seats can do: **stall** (deny every approval), **sign without honest members**, or get **two conflicting decisions approved**. Honest members sign at most one of two conflicting proposals; the attacker signs both and may show different proposals to different members. A pool of n members with quorum k therefore allows a conflict from 2k − n attacker seats. In the registered layout each condition applies to the leader WC and to the subordinates separately. The seat condition is necessary; the attacker also needs a proposer turn or another way to put two proposals in front of members.",
+        "Tables `G1_quorum_kwc.csv`, `G2_split_rule.csv`, `G3_cac_quorum.csv`; chart `G1_quorum_tradeoff.png`. This section changes no SPEC quorum. For each quorum fraction q it shows what an attacker holding a fraction p of the seats can do: **stall** (deny every approval), **sign without honest members**, or get **two conflicting decisions approved**. Honest members sign at most one of two conflicting proposals; the attacker signs both and may show different proposals to different members. A pool of n members with quorum k therefore allows a conflict from 2k − n attacker seats. In the registered layout each condition applies to the leader WC and to the subordinates separately. The seat condition is necessary; the attacker also has to put both proposals forward, and the proposer rights (SPEC v0.4 §4.4) decide who can: the master proposer for MOBr, registered offline requests and bans; the subordinate-only proposer for MOBu and unregistered offline requests, and bans of leader-chain members who refuse to witness newcomers; the miner for its own offline request. Since SPEC v0.4 (§4.6), two conflicting decisions that are both approved are **both rejected**, and every member who signed both has produced equivocation evidence and may be banned. A conflict therefore cancels a decision rather than enacting two.",
     );
     blank(out);
     let layouts = [POOL_LAYOUT, REGISTERED_LAYOUT];
@@ -1575,6 +1756,7 @@ fn quorum_tradeoff(out: &mut String, results: &M1Results) {
         }
     }
     quorum_counts(out, results, kwcs);
+    quorum_seat_rule(out, config, results, kwcs);
     split_rule(out, results, kwcs);
     committee_quorum(out, results);
     quorum_plain_english(out, results, kwcs);
@@ -1594,7 +1776,7 @@ fn quorum_counts(out: &mut String, results: &M1Results, kwcs: u64) {
     line(
         out,
         &format!(
-            "**Expected counts at p = 25%, {} KWCs.** \"Now\" is the expected number of KWCs in the state at one moment. \"Over {} years\" is the expected number of compositions in the state under the SPEC §10 H6 refresh model and the adopted allocation ({} compositions, binomial, no bans or deactivation):",
+            "**Expected counts at p = 25%, {} KWCs.** \"Now\" is the expected number of KWCs in the state at one moment. \"Over {} years\" is the expected number of distinct episodes in the state (SPEC v0.4 §10 H6), with the composition count, the upper bound, in brackets; adopted allocation, {} compositions, binomial, no bans or absences:",
             short_count(kwcs),
             compact_number(10.0),
             compact_number(first.compositions_over_horizon)
@@ -1610,8 +1792,16 @@ fn quorum_counts(out: &mut String, results: &M1Results, kwcs: u64) {
                 count(&r.expected_kwcs_stall),
                 count(&r.expected_kwcs_sign),
                 count(&r.expected_kwcs_conflict),
-                count(&format!("{:e}", r.expected_compositions_sign)),
-                count(&format!("{:e}", r.expected_compositions_conflict)),
+                format!(
+                    "{} ({})",
+                    num(r.expected_episodes_sign),
+                    num(r.expected_compositions_sign)
+                ),
+                format!(
+                    "{} ({})",
+                    num(r.expected_episodes_conflict),
+                    num(r.expected_compositions_conflict)
+                ),
             ]
         })
         .collect();
@@ -1623,11 +1813,87 @@ fn quorum_counts(out: &mut String, results: &M1Results, kwcs: u64) {
             "stall, now",
             "sign alone, now",
             "conflict, now",
-            "sign alone, over 10 years",
-            "conflict, over 10 years",
+            "sign alone, over 10 years: episodes (compositions)",
+            "conflict, over 10 years: episodes (compositions)",
         ]),
         &body,
     );
+}
+
+fn quorum_seat_rule(out: &mut String, config: &Config, results: &M1Results, kwcs: u64) {
+    let models = absence_models(config);
+    let Some(primary) = models.first() else {
+        return;
+    };
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let slice: Vec<&SeatRuleQuorumRow> = results
+        .g
+        .seat_rule
+        .iter()
+        .filter(|r| {
+            r.spec_default
+                && r.kwcs == kwcs
+                && r.attacker_fraction == 0.25
+                && r.duration_model == primary.label()
+                && r.absences_per_id_per_year == c
+        })
+        .collect();
+    let (Some(pool), Some(registered)) = (
+        slice.iter().find(|r| r.layout == POOL_LAYOUT),
+        slice.iter().find(|r| r.layout == REGISTERED_LAYOUT),
+    ) else {
+        return;
+    };
+    line(
+        out,
+        &format!(
+            "**Ten-year episodes under each seat rule** (`G4_quorum_10y_by_seat_rule.csv`): SPEC default quorums, p = 25%, {} KWCs at the start, {} absences per ID per year with Lomax durations. Expected distinct episodes:",
+            short_count(kwcs),
+            compact_number(c)
+        ),
+    );
+    blank(out);
+    let mut rules: Vec<String> = Vec::new();
+    for r in &slice {
+        if !rules.contains(&r.seat_rule) {
+            rules.push(r.seat_rule.clone());
+        }
+    }
+    let headers = vec![
+        "seat rule".to_string(),
+        format!("{}: stall", pool.approvals),
+        format!("{}: sign alone", pool.approvals),
+        format!("{}: conflict", pool.approvals),
+        format!("{}: stall", registered.approvals),
+        format!("{}: sign alone", registered.approvals),
+        format!("{}: conflict", registered.approvals),
+    ];
+    let body: Vec<Vec<String>> = rules
+        .iter()
+        .map(|rule| {
+            let mut row = vec![rule.clone()];
+            for layout in [POOL_LAYOUT, REGISTERED_LAYOUT] {
+                let r = slice
+                    .iter()
+                    .find(|r| r.layout == layout && r.seat_rule == *rule);
+                for pick in [
+                    |r: &SeatRuleQuorumRow| r.expected_episodes_stall,
+                    |r: &SeatRuleQuorumRow| r.expected_episodes_sign,
+                    |r: &SeatRuleQuorumRow| r.expected_episodes_conflict,
+                ] {
+                    row.push(r.map_or("—".to_string(), |r| num(pick(r))));
+                }
+            }
+            row
+        })
+        .collect();
+    table(out, &headers, &body);
 }
 
 fn split_rule(out: &mut String, results: &M1Results, kwcs: u64) {
@@ -1719,8 +1985,8 @@ fn split_rule(out: &mut String, results: &M1Results, kwcs: u64) {
             ]),
             strings(&[
                 "decision quorum (two-thirds)",
-                "false or conflicting bans, MOBu/MOBr, offline requests and committee blocks, which rest on witnesses' observations rather than on data validators can recompute",
-                "committee placements, joins and leaves: every node recomputes them and rejects a mismatch (§4.2, §4.3); two conflicting committee blocks from one leader: both rejected (§4.3)",
+                "false bans, MOBu/MOBr, offline requests and committee records, which rest on witnesses' observations rather than on data validators can recompute; and cancelling a decision by getting a conflicting one approved",
+                "committee placements, joins and leaves: every node recomputes them and rejects a mismatch, and placement no longer waits for the committee (§4.2, §4.3); two conflicting approved decisions or committee blocks: both rejected, and those who signed both are exposed (§4.3, §4.6)",
             ]),
         ],
     );
@@ -1858,7 +2124,7 @@ fn quorum_plain_english(out: &mut String, results: &M1Results, kwcs: u64) {
             line(
                 out,
                 &format!(
-                    "- **It makes conflicting approvals much easier.** Two conflicting decisions need {} attacker seats at q = {low} against {} at {default}. At p = 10% that is possible in {} of KWCs, against {}.",
+                    "- **It makes conflicting approvals much easier.** Two conflicting decisions need {} attacker seats at q = {low} against {} at {default}. At p = 10% that is possible in {} of KWCs, against {}. Under SPEC v0.4 both are then rejected, so the harm is a cancelled decision, and every member who signed both is exposed.",
                     l10.seats_to_conflict.trim_start_matches("≥ "),
                     d10.seats_to_conflict.trim_start_matches("≥ "),
                     prob(&l10.p_conflict),
@@ -1880,7 +2146,7 @@ fn quorum_plain_english(out: &mut String, results: &M1Results, kwcs: u64) {
         line(
             out,
             &format!(
-                "- **The committee.** At q = {} a conflict needs {} of {} seats, and an attacker with {} of active IDs holds that many with probability {}. Placement conflicts are neutralised, because every node recomputes placement (§4.2), and a leader with two conflicting approved blocks has both rejected (§4.3). The committee's remaining power is over compiling bans that KWCs already approved: it can delay or omit them.",
+                "- **The committee.** At q = {} a conflict needs {} of {} seats, and an attacker with {} of active IDs holds that many with probability {}. Placement conflicts are neutralised, because every node recomputes placement and it takes effect without the committee (§4.2), and a leader with two conflicting approved blocks has both rejected (§4.3). The committee's remaining power is over compiling bans that KWCs already approved: it can delay or omit them.",
                 r.quorum,
                 r.seats_to_conflict,
                 r.committee_size,
@@ -1891,13 +2157,1066 @@ fn quorum_plain_english(out: &mut String, results: &M1Results, kwcs: u64) {
     }
     line(
         out,
-        "- **Not considered.** A quorum at or below 50%: two disjoint groups of honest members could then approve conflicting decisions with no attacker at all. The single-member entropy stall, where one online member withholds its entropy signature, does not depend on the quorum; One Chance (§4.5) handles it.",
+        "- **Not considered.** A quorum at or below 50%: two disjoint groups of honest members could then approve conflicting decisions with no attacker at all. The single-member entropy stall, where one online member withholds its entropy signature, does not depend on the quorum; One Chance (§4.5) handles it, and threshold BLS entropy (SPEC §12 [P]) would remove it.",
+    );
+    blank(out);
+}
+
+/// The minimum uptime of an H2 or I2 row, or "not reachable" with P(fail) at full uptime.
+fn minimum_uptime(minimum: Option<f64>, at_full: &str) -> String {
+    minimum.map_or_else(
+        || format!("not reachable ({} fail at f = 1)", prob(at_full)),
+        |f| format!("{f:.4}"),
+    )
+}
+
+/// An uptime rounded up to four decimals, or "not reachable".
+fn uptime_up(value: Option<f64>) -> String {
+    value.map_or("not reachable".to_string(), |u| {
+        format!("{:.4}", libm::ceil(u * 1e4) / 1e4)
+    })
+}
+
+fn quorum_feasibility(out: &mut String, config: &Config, results: &M1Results) {
+    line(
+        out,
+        "## 11. Quorum feasibility under honest downtime (section H)",
+    );
+    blank(out);
+    line(
+        out,
+        "Tables `H1_quorum_feasibility.csv`, `H2_minimum_uptime.csv`, `H3_absent_seat_share.csv`; chart `H1_quorum_feasibility.png`. A KWC can approve only when enough members sign. Each honest member is online, and signs, with probability f; the attacker holds a fraction p of the seats and its members withhold, so each seat signs with probability (1 − p)·f. Three layouts: the unregistered PoWit (any 27 of 40); the SPEC registered PoWit (7 of the leader WC's 10 and 21 of the 30 subordinates); and, for comparison, a registered PoWit valid with any 27 of 40, the validity rule of the [P] proposal to separate validity from payment (SPEC §12). The comparison's numbers equal the unregistered ones, so the gap between the two registered rules is the cost of the leader requirement.",
+    );
+    blank(out);
+    line(
+        out,
+        &format!(
+            "**A KWC that cannot meet quorum is a local liveness problem.** Its miners move to another KWC after the grace epoch plus admission, about {} s at the §2 defaults (SPEC §3.2), and the rest of the network continues. Miners are spread evenly over KWCs, so at any moment the share of miners affected equals the failure probability.",
+            compact_number(realistic_restart_cost_s(config))
+        ),
+    );
+    blank(out);
+    line(
+        out,
+        "**Withholding is assumed to cost the attacker nothing.** Every row with an attacker, including H2's \"not reachable\" entries, assumes its withholding members suffer no penalty. Under SPEC §4.5–§4.6 an online member that refuses to sign after One Chance is banned; M4 models that.",
+    );
+    blank(out);
+    feasibility_tables(out, &results.h);
+    minimum_uptime_table(out, &results.h);
+    absent_seat_table(out, config, &results.h);
+    feasibility_plain_english(out, config, results);
+}
+
+fn feasibility_tables(out: &mut String, h: &SectionH) {
+    let rows = &h.feasibility;
+    let Some(first) = rows.first() else {
+        return;
+    };
+    let kwcs = first.kwcs;
+    let find = |layout: &str, p: f64, f: f64| {
+        rows.iter()
+            .find(|r| r.layout == layout && r.attacker_fraction == p && r.online_fraction == f)
+    };
+    let approvals = |layout: &str| {
+        rows.iter()
+            .find(|r| r.layout == layout)
+            .map_or(String::new(), |r| r.approvals.clone())
+    };
+    let (pool, registered) = (approvals(UNREGISTERED), approvals(REGISTERED));
+    line(
+        out,
+        &format!(
+            "**Share of KWCs that cannot meet quorum, every member honest** (exact; expected failing KWCs at a network of {} KWCs):",
+            short_count(kwcs)
+        ),
+    );
+    blank(out);
+    let online = distinct(rows.iter().map(|r| r.online_fraction));
+    let body: Vec<Vec<String>> = online
+        .iter()
+        .filter_map(|f| {
+            let (a, b) = (find(UNREGISTERED, 0.0, *f)?, find(REGISTERED, 0.0, *f)?);
+            Some(vec![
+                share(*f),
+                prob(&a.p_fail),
+                prob(&b.p_fail),
+                b.p_leader_below_quorum
+                    .as_deref()
+                    .map_or("—".to_string(), prob),
+                b.p_subordinates_below_quorum
+                    .as_deref()
+                    .map_or("—".to_string(), prob),
+                num(a.expected_failing_kwcs),
+                num(b.expected_failing_kwcs),
+            ])
+        })
+        .collect();
+    table(
+        out,
+        &[
+            "f".to_string(),
+            pool.clone(),
+            registered.clone(),
+            "leader WC below its quorum".to_string(),
+            "subordinates below theirs".to_string(),
+            format!("failing KWCs, {pool}"),
+            format!("failing KWCs, {registered}"),
+        ],
+        &body,
+    );
+    let high: Vec<f64> = online.iter().copied().filter(|f| *f >= 0.9).collect();
+    let fractions: Vec<f64> = distinct(rows.iter().map(|r| r.attacker_fraction))
+        .into_iter()
+        .filter(|p| *p > 0.0)
+        .collect();
+    if high.is_empty() || fractions.is_empty() {
+        return;
+    }
+    line(
+        out,
+        "**With attacker members withholding** (share of KWCs that cannot meet quorum):",
+    );
+    blank(out);
+    let mut headers = vec!["p".to_string()];
+    for (layout, label) in [(UNREGISTERED, &pool), (REGISTERED, &registered)] {
+        let _ = layout;
+        headers.extend(high.iter().map(|f| format!("{label}, f = {}", share(*f))));
+    }
+    let body: Vec<Vec<String>> =
+        fractions
+            .iter()
+            .map(|p| {
+                let mut row = vec![share(*p)];
+                for layout in [UNREGISTERED, REGISTERED] {
+                    row.extend(high.iter().map(|f| {
+                        find(layout, *p, *f).map_or("—".to_string(), |r| prob(&r.p_fail))
+                    }));
+                }
+                row
+            })
+            .collect();
+    table(out, &headers, &body);
+}
+
+fn minimum_uptime_table(out: &mut String, h: &SectionH) {
+    let rows = &h.minimum_uptime;
+    let targets = distinct(rows.iter().map(|r| r.failure_target));
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let approvals = |layout: &str| {
+        rows.iter()
+            .find(|r| r.layout == layout)
+            .map_or(String::new(), |r| r.approvals.clone())
+    };
+    line(
+        out,
+        "**Minimum honest uptime f for fewer than the target share of KWCs to fail** (`H2_minimum_uptime.csv`; exact bisection on a 10⁻⁴ grid, verified on both sides):",
+    );
+    blank(out);
+    let mut headers = vec!["p".to_string()];
+    for layout in [UNREGISTERED, REGISTERED] {
+        for t in &targets {
+            headers.push(format!("{}, under {}", approvals(layout), share(*t)));
+        }
+    }
+    let body: Vec<Vec<String>> = fractions
+        .iter()
+        .map(|p| {
+            let mut row = vec![share(*p)];
+            for layout in [UNREGISTERED, REGISTERED] {
+                for t in &targets {
+                    row.push(
+                        rows.iter()
+                            .find(|r| {
+                                r.layout == layout
+                                    && r.attacker_fraction == *p
+                                    && r.failure_target == *t
+                            })
+                            .map_or("—".to_string(), |r| {
+                                minimum_uptime(r.minimum_online_fraction, &r.p_fail_at_full_uptime)
+                            }),
+                    );
+                }
+            }
+            row
+        })
+        .collect();
+    table(out, &headers, &body);
+}
+
+fn absent_seat_table(out: &mut String, config: &Config, h: &SectionH) {
+    let models = absence_models(config);
+    let Some(primary) = models.first() else {
+        return;
+    };
+    let rows = &h.absent_seats;
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let target = rows.iter().map(|r| r.failure_target).fold(0.0, f64::max);
+    let slice: Vec<&AbsentSeatRow> = rows
+        .iter()
+        .filter(|r| {
+            r.attacker_fraction == 0.0
+                && r.failure_target == target
+                && r.duration_model == primary.label()
+                && r.absences_per_id_per_year == c
+        })
+        .collect();
+    let approvals = |layout: &str| {
+        slice
+            .iter()
+            .find(|r| r.layout == layout)
+            .map_or(String::new(), |r| r.approvals.clone())
+    };
+    line(
+        out,
+        &format!(
+            "**Absent IDs keep their seats (SPEC v0.4 §4.7)** (`H3_absent_seat_share.csv`). By Little's law, honest seat-holders are absent a share (c·E[min(D, L)] + a·L)/365 of the time, for c absences and a permanent departures per ID per year: a departed ID holds its seat as an offline member until L passes. The uptime needed among present members is the H2 minimum (before rounding to the grid) divided by (1 − that share). At {} absences per ID per year with Lomax durations, no attacker, under {} failing:",
+            compact_number(c),
+            share(target)
+        ),
+    );
+    blank(out);
+    let days = distinct(slice.iter().map(|r| r.long_absence_days));
+    let departures = distinct(slice.iter().map(|r| r.departures_per_id_per_year));
+    let mut body = Vec::new();
+    for d in &days {
+        for a in &departures {
+            let find = |layout: &str| {
+                slice.iter().find(|r| {
+                    r.layout == layout
+                        && r.long_absence_days == *d
+                        && r.departures_per_id_per_year == *a
+                })
+            };
+            let (Some(pool), Some(registered)) = (find(UNREGISTERED), find(REGISTERED)) else {
+                continue;
+            };
+            body.push(vec![
+                format!(
+                    "{} d ({} blocks)",
+                    compact_number(*d),
+                    compact_number(pool.long_absence_blocks)
+                ),
+                share(*a),
+                pct(pool.absent_seat_share),
+                uptime_up(pool.required_ordinary_uptime),
+                uptime_up(registered.required_ordinary_uptime),
+            ]);
+        }
+    }
+    table(
+        out,
+        &[
+            "L".to_string(),
+            "departures per ID per year".to_string(),
+            "seats held by absent IDs".to_string(),
+            format!("uptime needed, {}", approvals(UNREGISTERED)),
+            format!("uptime needed, {}", approvals(REGISTERED)),
+        ],
+        &body,
+    );
+}
+
+fn feasibility_plain_english(out: &mut String, config: &Config, results: &M1Results) {
+    let h = &results.h;
+    line(out, "**What this implies for L and for honest uptime.**");
+    blank(out);
+    let minimum = |layout: &str, p: f64, t: f64| {
+        h.minimum_uptime
+            .iter()
+            .find(|r| r.layout == layout && r.attacker_fraction == p && r.failure_target == t)
+    };
+    let targets = distinct(h.minimum_uptime.iter().map(|r| r.failure_target));
+    let (Some(&one), Some(&tenth)) = (
+        targets.iter().max_by(|a, b| a.total_cmp(b)),
+        targets.iter().min_by(|a, b| a.total_cmp(b)),
+    ) else {
+        return;
+    };
+    if let (Some(a1), Some(b1), Some(a2), Some(b2)) = (
+        minimum(UNREGISTERED, 0.0, one),
+        minimum(REGISTERED, 0.0, one),
+        minimum(UNREGISTERED, 0.0, tenth),
+        minimum(REGISTERED, 0.0, tenth),
+    ) {
+        if let (Some(fa1), Some(fb1), Some(fa2), Some(fb2)) = (
+            a1.minimum_online_fraction,
+            b1.minimum_online_fraction,
+            a2.minimum_online_fraction,
+            b2.minimum_online_fraction,
+        ) {
+            line(
+                out,
+                &format!(
+                    "- **Without an attacker**, keeping failing KWCs under {} needs honest members online {:.4} of the time for {}, but {:.4} for {}; under {}, {:.4} against {:.4}. The leader requirement costs {} points of uptime at the {} target. The [P] single 27-of-40 rule would give registered KWCs the unregistered figures.",
+                    share(one),
+                    fa1,
+                    a1.approvals,
+                    fb1,
+                    b1.approvals,
+                    share(tenth),
+                    fa2,
+                    fb2,
+                    sig3(100.0 * (fb1 - fa1)),
+                    share(one)
+                ),
+            );
+        }
+    }
+    let first_unreachable = |layout: &str| {
+        let mut rows: Vec<_> = h
+            .minimum_uptime
+            .iter()
+            .filter(|r| r.layout == layout && r.failure_target == one)
+            .collect();
+        rows.sort_by(|a, b| a.attacker_fraction.total_cmp(&b.attacker_fraction));
+        rows.into_iter()
+            .find(|r| r.minimum_online_fraction.is_none())
+    };
+    if let (Some(a), Some(b)) = (
+        first_unreachable(UNREGISTERED),
+        first_unreachable(REGISTERED),
+    ) {
+        line(
+            out,
+            &format!(
+                "- **With attacker members withholding**, {} cannot keep failures under {} at any uptime from p = {} ({} of KWCs fail even at f = 1), and {} from p = {} ({}). These rows assume withholding is free (see above).",
+                b.approvals,
+                share(one),
+                share(b.attacker_fraction),
+                prob(&b.p_fail_at_full_uptime),
+                a.approvals,
+                share(a.attacker_fraction),
+                prob(&a.p_fail_at_full_uptime)
+            ),
+        );
+    }
+    let models = absence_models(config);
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let default_days = config.offline.long_absence_threshold_s.value / 86_400.0;
+    if let Some(primary) = models.first() {
+        let row = |layout: &str, days: f64, a: f64| {
+            h.absent_seats.iter().find(|r| {
+                r.layout == layout
+                    && r.attacker_fraction == 0.0
+                    && r.failure_target == one
+                    && r.duration_model == primary.label()
+                    && r.absences_per_id_per_year == c
+                    && r.long_absence_days == days
+                    && r.departures_per_id_per_year == a
+            })
+        };
+        let days = distinct(h.absent_seats.iter().map(|r| r.long_absence_days));
+        let departures = distinct(h.absent_seats.iter().map(|r| r.departures_per_id_per_year));
+        let (Some(&shortest), Some(&longest)) = (
+            days.iter().min_by(|a, b| a.total_cmp(b)),
+            days.iter().max_by(|a, b| a.total_cmp(b)),
+        ) else {
+            return;
+        };
+        let middle = departures
+            .iter()
+            .copied()
+            .filter(|a| *a > 0.0)
+            .fold(f64::INFINITY, f64::min);
+        if let (Some(s0), Some(l0), Some(sd), Some(ld)) = (
+            row(UNREGISTERED, shortest, 0.0),
+            row(UNREGISTERED, longest, 0.0),
+            row(UNREGISTERED, default_days, middle),
+            row(UNREGISTERED, longest, middle),
+        ) && ld.absent_seat_share > 2.0 * l0.absent_seat_share
+        {
+            line(
+                out,
+                &format!(
+                    "- **Temporary absences hold few seats; permanent departures dominate.** With {} absences per ID per year and no departures, absent IDs hold {} of seats at L = {} days and {} at L = {} days. A departed ID holds its seat for all of L, so with {} departures per ID per year they hold {} at L = {} days and {} at L = {} days.",
+                    compact_number(c),
+                    pct(s0.absent_seat_share),
+                    compact_number(shortest),
+                    pct(l0.absent_seat_share),
+                    compact_number(longest),
+                    share(middle),
+                    pct(sd.absent_seat_share),
+                    compact_number(default_days),
+                    pct(ld.absent_seat_share),
+                    compact_number(longest)
+                ),
+            );
+        }
+        if let (Some(pool), Some(registered)) = (
+            row(UNREGISTERED, default_days, middle),
+            row(REGISTERED, default_days, middle),
+        ) {
+            let unreachable_from = days
+                .iter()
+                .copied()
+                .filter(|d| {
+                    row(REGISTERED, *d, middle)
+                        .is_some_and(|r| r.required_ordinary_uptime.is_none())
+                })
+                .fold(f64::INFINITY, f64::min);
+            let mut text = format!(
+                "- **At the default L = {} days** with {} departures per ID per year, the ordinary uptime needed for under {} failing is {} for {} and {} for {}.",
+                compact_number(default_days),
+                share(middle),
+                share(one),
+                uptime_up(pool.required_ordinary_uptime),
+                pool.approvals,
+                uptime_up(registered.required_ordinary_uptime),
+                registered.approvals
+            );
+            if unreachable_from.is_finite() {
+                text.push_str(&format!(
+                    " From L = {} days, {} cannot stay under {} at any uptime.",
+                    compact_number(unreachable_from),
+                    registered.approvals,
+                    share(one)
+                ));
+            }
+            line(out, &text);
+        }
+    }
+    if l_is_a_trade_off(results, one) {
+        line(
+            out,
+            "- **So L is a trade-off.** A shorter L vacates and re-inserts more absent IDs, which adds compositions (section 5, table B5); a longer L leaves more seats with absent IDs, which needs more honest uptime (table H3). Household profiles from M3 will replace the illustrative absence inputs.",
+        );
+    }
+    blank(out);
+}
+
+/// True when, in the tables, compositions fall (B5) and the absent seat share rises (H3) as L
+/// grows, in every series.
+fn l_is_a_trade_off(results: &M1Results, target: f64) -> bool {
+    type Series = BTreeMap<(String, u64, u64, String, u64), Vec<(f64, f64)>>;
+    let mut compositions: Series = BTreeMap::new();
+    for r in &results.b.seat_rule {
+        let Some(days) = r.long_absence_days else {
+            continue;
+        };
+        compositions
+            .entry((
+                r.miner_kind.to_string(),
+                r.attacker_fraction.to_bits(),
+                r.initial_kwcs,
+                r.duration_model.to_string(),
+                r.absences_per_id_per_year.to_bits(),
+            ))
+            .or_default()
+            .push((days, r.compositions));
+    }
+    let mut shares: Series = BTreeMap::new();
+    for r in &results.h.absent_seats {
+        if r.failure_target != target || r.layout != UNREGISTERED || r.attacker_fraction != 0.0 {
+            continue;
+        }
+        shares
+            .entry((
+                r.duration_model.to_string(),
+                r.absences_per_id_per_year.to_bits(),
+                r.departures_per_id_per_year.to_bits(),
+                String::new(),
+                0,
+            ))
+            .or_default()
+            .push((r.long_absence_days, r.absent_seat_share));
+    }
+    let monotone = |series: &mut Series, rising: bool| {
+        !series.is_empty()
+            && series.values_mut().all(|v| {
+                v.sort_by(|a, b| a.0.total_cmp(&b.0));
+                v.windows(2).all(|w| {
+                    if rising {
+                        w[1].1 >= w[0].1
+                    } else {
+                        w[1].1 <= w[0].1
+                    }
+                })
+            })
+    };
+    monotone(&mut compositions, false) && monotone(&mut shares, true)
+}
+
+/// A ruler as written in the summary, for example `{1, 4, 6}`.
+fn ruler(offsets: &[u64]) -> String {
+    let parts: Vec<String> = offsets.iter().map(|o| o.to_string()).collect();
+    format!("{{{}}}", parts.join(", "))
+}
+
+fn kwc_size_tradeoff(out: &mut String, config: &Config, results: &M1Results) {
+    let grid = &config.analytic.kwc_size;
+    line(out, "## 12. KWC size trade-off (section I)");
+    blank(out);
+    let rulers: Vec<String> = grid
+        .wcs_per_kwc
+        .iter()
+        .zip(&grid.ring_offsets)
+        .map(|(k, offsets)| format!("k = {k}: {}", ruler(offsets)))
+        .collect();
+    line(
+        out,
+        &format!(
+            "Tables `I1_kwc_size_security.csv`, `I2_kwc_size_liveness.csv`, `I3_kwc_size_load.csv`, `I4_on_demand_connections.csv`. A KWC of k WCs of 10 members has 10·k members. Each size uses an optimal Golomb ruler as its ring ({}); k = 4 is the protocol's ring. Two single quorums over the whole KWC are compared: two-thirds, ⌈2n/3⌉ (27 of 40 at k = 4), and the split rule's PoWit quorum, ⌈0.51·n⌉ (SPEC §12 [P]). Probabilities are exact, hypergeometric at {} KWCs. This section does not pick a size.",
+            rulers.join("; "),
+            short_count(grid.comparison_kwcs)
+        ),
+    );
+    blank(out);
+    size_security_tables(out, &results.i);
+    size_liveness_table(out, &results.i);
+    size_load_tables(out, config, &results.i);
+    on_demand_table(out, config, &results.i);
+    size_plain_english(out, config, &results.i);
+}
+
+/// Sizes in table order.
+fn sizes_in(rows: impl Iterator<Item = u64>) -> Vec<u64> {
+    let mut sizes: Vec<u64> = Vec::new();
+    for k in rows {
+        if !sizes.contains(&k) {
+            sizes.push(k);
+        }
+    }
+    sizes
+}
+
+fn size_security_tables(out: &mut String, i: &SectionI) {
+    let rows = &i.security;
+    let sizes = sizes_in(rows.iter().map(|r| r.wcs_per_kwc));
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let mut quorums: Vec<String> = Vec::new();
+    for r in rows {
+        if !quorums.contains(&r.quorum) {
+            quorums.push(r.quorum.clone());
+        }
+    }
+    for q in &quorums {
+        let find = |k: u64, p: f64| {
+            rows.iter()
+                .find(|r| r.quorum == *q && r.wcs_per_kwc == k && r.attacker_fraction == p)
+        };
+        line(
+            out,
+            &format!(
+                "**Probability that the attacker can stall a KWC, quorum {q}** (the column header gives the attacker seats that stall):"
+            ),
+        );
+        blank(out);
+        let mut headers = vec!["p".to_string()];
+        headers.extend(sizes.iter().map(|k| {
+            let needed = find(*k, fractions[0]).map_or(String::new(), |r| {
+                format!(
+                    "{} of {}",
+                    r.seats_to_stall.trim_start_matches("≥ "),
+                    r.members
+                )
+            });
+            format!("k = {k} ({needed})")
+        }));
+        let body: Vec<Vec<String>> = fractions
+            .iter()
+            .map(|p| {
+                let mut row = vec![share(*p)];
+                row.extend(
+                    sizes
+                        .iter()
+                        .map(|k| find(*k, *p).map_or("—".to_string(), |r| prob(&r.p_stall))),
+                );
+                row
+            })
+            .collect();
+        table(out, &headers, &body);
+    }
+    let two_thirds = |k: u64, p: f64| {
+        rows.iter()
+            .find(|r| r.quorum == "2/3" && r.wcs_per_kwc == k && r.attacker_fraction == p)
+    };
+    line(
+        out,
+        "**Signing without honest members at two-thirds, p = 25%, and its ten-year episodes** (from 100,000 KWCs, no bans or absences; compositions, the upper bound, in brackets):",
+    );
+    blank(out);
+    let body: Vec<Vec<String>> = sizes
+        .iter()
+        .filter_map(|k| {
+            let r = two_thirds(*k, 0.25)?;
+            Some(vec![
+                k.to_string(),
+                r.members.to_string(),
+                sig3(r.compositions_per_insertion),
+                prob(&r.p_sign),
+                format!(
+                    "{} ({})",
+                    num(r.expected_episodes_sign),
+                    num(r.expected_compositions_sign)
+                ),
+            ])
+        })
+        .collect();
+    table(
+        out,
+        &strings(&[
+            "k",
+            "members",
+            "compositions per new ID",
+            "P(sign alone)",
+            "episodes over 10 years (compositions)",
+        ]),
+        &body,
+    );
+}
+
+fn size_liveness_table(out: &mut String, i: &SectionI) {
+    let rows = &i.liveness;
+    let sizes = sizes_in(rows.iter().map(|r| r.wcs_per_kwc));
+    let target = rows.iter().map(|r| r.failure_target).fold(0.0, f64::max);
+    let fractions = distinct(rows.iter().map(|r| r.attacker_fraction));
+    let mut quorums: Vec<String> = Vec::new();
+    for r in rows {
+        if !quorums.contains(&r.quorum) {
+            quorums.push(r.quorum.clone());
+        }
+    }
+    line(
+        out,
+        &format!(
+            "**Minimum honest uptime for under {} of KWCs failing** (`I2_kwc_size_liveness.csv`; attacker members withhold, as in section 11):",
+            share(target)
+        ),
+    );
+    blank(out);
+    let mut headers = vec!["quorum".to_string(), "p".to_string()];
+    headers.extend(sizes.iter().map(|k| format!("k = {k}")));
+    let mut body = Vec::new();
+    for q in &quorums {
+        for p in &fractions {
+            let mut row = vec![q.clone(), share(*p)];
+            row.extend(sizes.iter().map(|k| {
+                rows.iter()
+                    .find(|r| {
+                        r.quorum == *q
+                            && r.wcs_per_kwc == *k
+                            && r.attacker_fraction == *p
+                            && r.failure_target == target
+                    })
+                    .map_or("—".to_string(), |r| match r.minimum_online_fraction {
+                        Some(f) => format!("{f:.4}"),
+                        None => "not reachable".to_string(),
+                    })
+            }));
+            body.push(row);
+        }
+    }
+    table(out, &headers, &body);
+}
+
+fn size_load_tables(out: &mut String, config: &Config, i: &SectionI) {
+    let rows = &i.load;
+    let sizes = sizes_in(rows.iter().map(|r| r.wcs_per_kwc));
+    let grid = &config.analytic.kwc_size;
+    let fastest = grid
+        .registered_cadences_s
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let mut policies: Vec<String> = Vec::new();
+    for r in rows {
+        if !policies.contains(&r.policy) {
+            policies.push(r.policy.clone());
+        }
+    }
+    line(
+        out,
+        &format!(
+            "**Load per node** (`I3_kwc_size_load.csv`): miners watched per node, which is also its open miner connections and its hash recomputations per second, and its steady bandwidth with registered miners exchanging every {} s, unregistered every {} s, {} bytes per exchange, no transport overhead. Policies: A, every WC hosts the SPEC capacity; B, every node watches as many miners as at the protocol size; C, the architect's rule, {} registered miners per WC (10 IDs plus the {} spare-capacity target) plus u unregistered.",
+            compact_number(fastest),
+            compact_number(grid.unregistered_cadence_s),
+            compact_number(grid.message_bytes),
+            policy_c_registered(config).map_or("—".to_string(), |n| n.to_string()),
+            share(config.capacity.spare_target_fraction.value)
+        ),
+    );
+    blank(out);
+    let find = |policy: &str, k: u64| {
+        rows.iter()
+            .find(|r| r.policy == policy && r.wcs_per_kwc == k && r.registered_cadence_s == fastest)
+    };
+    let mut headers = vec!["policy".to_string()];
+    headers.extend(sizes.iter().map(|k| format!("k = {k}")));
+    let body: Vec<Vec<String>> = policies
+        .iter()
+        .map(|policy| {
+            let mut row = vec![policy.clone()];
+            row.extend(sizes.iter().map(|k| {
+                find(policy, *k).map_or("—".to_string(), |r| {
+                    format!(
+                        "{} miners, {} kB/s",
+                        compact_number(r.miners_watched_per_node),
+                        sig3(r.bandwidth_bytes_per_s / 1_000.0)
+                    )
+                })
+            }));
+            row
+        })
+        .collect();
+    table(out, &headers, &body);
+    line(out, "**Connections and spare registered capacity:**");
+    blank(out);
+    let mut body = vec![
+        {
+            let mut row = vec!["connections per miner (KWC size)".to_string()];
+            row.extend(sizes.iter().map(|k| {
+                rows.iter()
+                    .find(|r| r.wcs_per_kwc == *k)
+                    .map_or("—".to_string(), |r| r.connections_per_miner.to_string())
+            }));
+            row
+        },
+        {
+            let mut row = vec!["standing witness-peer connections per node, option 1".to_string()];
+            row.extend(sizes.iter().map(|k| {
+                rows.iter()
+                    .find(|r| r.wcs_per_kwc == *k)
+                    .map_or("—".to_string(), |r| {
+                        r.peer_connections_option_1.to_string()
+                    })
+            }));
+            row
+        },
+    ];
+    for policy in &policies {
+        let mut row = vec![format!("registered capacity ÷ registered IDs, {policy}")];
+        row.extend(sizes.iter().map(|k| {
+            find(policy, *k).map_or("—".to_string(), |r| {
+                sig3(r.registered_capacity_per_registered_id)
+            })
+        }));
+        body.push(row);
+    }
+    let mut headers = vec!["".to_string()];
+    headers.extend(sizes.iter().map(|k| format!("k = {k}")));
+    table(out, &headers, &body);
+}
+
+fn on_demand_table(out: &mut String, config: &Config, i: &SectionI) {
+    let rows = &i.on_demand;
+    let Some(policy) = rows.first().map(|r| r.policy.clone()) else {
+        return;
+    };
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let changes = distinct(rows.iter().map(|r| r.session_changes_per_miner_per_day));
+    let sizes = sizes_in(rows.iter().map(|r| r.wcs_per_kwc));
+    line(
+        out,
+        &format!(
+            "**Witness peer topology.** Option 1 keeps a standing connection to every member of a node's k KWCs (table above). Option 2, the architect's design [P] (SPEC §12), keeps none: the miner relays routine messages, and members connect on demand through the global directory only for One Chance, decisions, proposer duties and catch-up. Estimated on-demand connections per node per hour (opened plus accepted; `I4_on_demand_connections.csv`), policy {policy}, {} absences per member per year all treated as unannounced (the worst case for One Chance), no bans; a decision costs each member 2(n − 1)/n connections on average, averaging out the two proposers:",
+            compact_number(c)
+        ),
+    );
+    blank(out);
+    let mut headers = strings(&["k", "One Chance", "catch-up"]);
+    for s in &changes {
+        headers.push(format!(
+            "decisions, {} session changes per miner per day",
+            compact_number(*s)
+        ));
+        headers.push(format!("total, {} changes per day", compact_number(*s)));
+    }
+    let body: Vec<Vec<String>> = sizes
+        .iter()
+        .filter_map(|k| {
+            let at = |s: f64| {
+                rows.iter().find(|r| {
+                    r.wcs_per_kwc == *k
+                        && r.policy == policy
+                        && r.absences_per_id_per_year == c
+                        && r.session_changes_per_miner_per_day == s
+                        && r.ban_rate_per_year == 0.0
+                })
+            };
+            let first = at(changes[0])?;
+            let mut row = vec![
+                k.to_string(),
+                sig3(first.one_chance_per_hour),
+                sig3(first.catch_up_per_hour),
+            ];
+            for s in &changes {
+                let r = at(*s)?;
+                row.push(sig3(r.decisions_per_hour));
+                row.push(sig3(r.total_per_hour));
+            }
+            Some(row)
+        })
+        .collect();
+    table(out, &headers, &body);
+}
+
+fn size_plain_english(out: &mut String, config: &Config, i: &SectionI) {
+    line(out, "**What size buys and costs.**");
+    blank(out);
+    let rows = &i.security;
+    let sizes = sizes_in(rows.iter().map(|r| r.wcs_per_kwc));
+    let (Some(&small), Some(&large)) = (sizes.first(), sizes.last()) else {
+        return;
+    };
+    let at = |q: &str, k: u64, p: f64| {
+        rows.iter()
+            .find(|r| r.quorum == q && r.wcs_per_kwc == k && r.attacker_fraction == p)
+    };
+    let series = |q: &str, p: f64| -> Vec<f64> {
+        sizes
+            .iter()
+            .filter_map(|k| at(q, *k, p).map(|r| r.log10_p_stall))
+            .collect()
+    };
+    let falls = series("2/3", 0.25).windows(2).all(|w| w[1] < w[0]);
+    let high = 0.4;
+    let rises_overall = match (at("2/3", small, high), at("2/3", large, high)) {
+        (Some(a), Some(b)) => b.log10_p_stall > a.log10_p_stall,
+        _ => false,
+    };
+    let strictly = series("2/3", high).windows(2).all(|w| w[1] > w[0]);
+    if let (true, true, Some(a25), Some(b25), Some(a40), Some(b40)) = (
+        falls,
+        rises_overall,
+        at("2/3", small, 0.25),
+        at("2/3", large, 0.25),
+        at("2/3", small, high),
+        at("2/3", large, high),
+    ) {
+        let thresholds: Vec<String> = sizes
+            .iter()
+            .filter_map(|k| at("2/3", *k, 0.25))
+            .map(|r| {
+                let seats: f64 = r
+                    .seats_to_stall
+                    .trim_start_matches("≥ ")
+                    .parse()
+                    .unwrap_or(f64::NAN);
+                format!(
+                    "{} of {} ({})",
+                    r.seats_to_stall.trim_start_matches("≥ "),
+                    r.members,
+                    pct(seats / r.members as f64)
+                )
+            })
+            .collect();
+        let mut text = format!(
+            "- **Bigger groups make the one-third line sharper but do not move it.** At two-thirds, the chance an attacker can stall a KWC falls with size well below one third (p = 25%: {} at k = {small}, {} at k = {large}) and rises towards 1 well above it (p = 40%: {} at k = {small}, {} at k = {large}).",
+            prob(&a25.p_stall),
+            prob(&b25.p_stall),
+            prob(&a40.p_stall),
+            prob(&b40.p_stall)
+        );
+        let near: Vec<f64> = distinct(rows.iter().map(|r| r.attacker_fraction))
+            .into_iter()
+            .filter(|p| *p > 0.25 && *p < 0.4)
+            .collect();
+        let wobbles = !near.is_empty()
+            && near.iter().all(|p| {
+                let v = series("2/3", *p);
+                !v.windows(2).all(|w| w[1] > w[0]) && !v.windows(2).all(|w| w[1] < w[0])
+            });
+        if !strictly || wobbles {
+            let shares: Vec<String> = near.iter().map(|p| share(*p)).collect();
+            text.push_str(&format!(
+                " Neither trend is smooth near the line, because ⌈2n/3⌉ rounds differently at each size: stalling needs {}",
+                thresholds.join(", ")
+            ));
+            if wobbles {
+                text.push_str(&format!(
+                    ", so at p = {} the odds move up and down with size",
+                    shares.join(" and ")
+                ));
+            }
+            text.push('.');
+        }
+        line(out, &text);
+    }
+    if let (Some(two), Some(low)) = (at("2/3", 4, high), at("0.51", 4, high)) {
+        if prob(&low.p_stall) != prob(&two.p_stall) {
+            line(
+                out,
+                &format!(
+                    "- **A lower PoWit quorum moves the line.** At 0.51, stalling a 40-member KWC needs {} seats instead of {}, so at p = 40% the stall chance is {} instead of {}. It also allows two conflicting approvals from {} attacker seats at every size, which is why it suits PoWits only: validators recompute every PoWit, while decisions keep two-thirds (section 10).",
+                    low.seats_to_stall.trim_start_matches("≥ "),
+                    two.seats_to_stall.trim_start_matches("≥ "),
+                    prob(&low.p_stall),
+                    prob(&two.p_stall),
+                    low.seats_to_conflict.trim_start_matches("≥ ")
+                ),
+            );
+        }
+    }
+    let live = |k: u64| {
+        i.liveness.iter().find(|r| {
+            r.quorum == "2/3"
+                && r.wcs_per_kwc == k
+                && r.attacker_fraction == 0.0
+                && r.failure_target == 0.01
+        })
+    };
+    if let (Some(a), Some(b)) = (live(small), live(large))
+        && let (Some(fa), Some(fb)) = (a.minimum_online_fraction, b.minimum_online_fraction)
+    {
+        let mut text = format!(
+            "- **Liveness.** Without an attacker, two-thirds needs honest uptime {fa:.4} at k = {small} and {fb:.4} at k = {large} for under 1% of KWCs failing."
+        );
+        let mut parts = Vec::new();
+        let mut quorums: Vec<String> = Vec::new();
+        for r in &i.liveness {
+            if !quorums.contains(&r.quorum) {
+                quorums.push(r.quorum.clone());
+            }
+        }
+        for q in &quorums {
+            let fractions: Vec<f64> = distinct(i.liveness.iter().map(|r| r.attacker_fraction))
+                .into_iter()
+                .filter(|p| *p > 0.0)
+                .collect();
+            // (where, shares) groups of consecutive attacker shares with the same answer.
+            let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+            for p in &fractions {
+                let reachable: Vec<u64> = sizes
+                    .iter()
+                    .copied()
+                    .filter(|k| {
+                        i.liveness.iter().any(|r| {
+                            r.quorum == *q
+                                && r.wcs_per_kwc == *k
+                                && r.attacker_fraction == *p
+                                && r.failure_target == 0.01
+                                && r.minimum_online_fraction.is_some()
+                        })
+                    })
+                    .collect();
+                let suffix = reachable
+                    .first()
+                    .and_then(|k| sizes.iter().position(|s| s == k))
+                    .is_some_and(|start| sizes[start..] == reachable[..]);
+                let where_ = if reachable.len() == sizes.len() {
+                    "at every size".to_string()
+                } else if reachable.is_empty() {
+                    "at no size".to_string()
+                } else if suffix {
+                    format!("only from k = {}", reachable[0])
+                } else {
+                    let ks: Vec<String> = reachable.iter().map(|k| k.to_string()).collect();
+                    format!("only at k = {}", ks.join(", "))
+                };
+                match groups.last_mut() {
+                    Some((last, shares)) if *last == where_ => shares.push(share(*p)),
+                    _ => groups.push((where_, vec![share(*p)])),
+                }
+            }
+            let phrases: Vec<String> = groups
+                .iter()
+                .map(|(where_, shares)| {
+                    let list = match shares.split_last() {
+                        Some((last, rest)) if !rest.is_empty() => {
+                            format!("{} and {last}", rest.join(", "))
+                        }
+                        _ => shares.join(""),
+                    };
+                    format!("at p = {list} {where_}")
+                })
+                .collect();
+            let name = if q == "2/3" {
+                "two-thirds".to_string()
+            } else {
+                format!("the {q} quorum")
+            };
+            parts.push(format!("for {name} {}", phrases.join(", ")));
+        }
+        if !parts.is_empty() {
+            text.push_str(&format!(
+                " With attacker members withholding (and no penalty), staying under 1% is possible {}.",
+                parts.join("; ")
+            ));
+        }
+        line(out, &text);
+    }
+    let load = |policy: &LoadPolicy, k: u64| {
+        let label = policy.label(config).ok()?;
+        i.load
+            .iter()
+            .find(|r| r.policy == label && r.wcs_per_kwc == k)
+    };
+    let target = 1.0 + config.capacity.spare_target_fraction.value;
+    let policy_c_meets_target = i
+        .load
+        .iter()
+        .filter(|r| r.unregistered_per_wc.is_some())
+        .all(|r| r.registered_capacity_per_registered_id >= target);
+    let b_label = LoadPolicy::PerNode.label(config).unwrap_or_default();
+    let b_watched = distinct(
+        i.load
+            .iter()
+            .filter(|r| r.policy == b_label)
+            .map(|r| r.miners_watched_per_node),
+    );
+    let decisions_dominate = i
+        .on_demand
+        .iter()
+        .filter(|r| r.session_changes_per_miner_per_day > 0.0)
+        .all(|r| r.decisions_per_hour > 0.5 * r.total_per_hour);
+    if let (Some(a_small), Some(a_large)) = (
+        load(&LoadPolicy::PerWc, small),
+        load(&LoadPolicy::PerWc, large),
+    ) {
+        let mut text = format!(
+            "- **Load.** Under policy A a node watches {} miners at k = {small} and {} at k = {large}",
+            compact_number(a_small.miners_watched_per_node),
+            compact_number(a_large.miners_watched_per_node)
+        );
+        if b_watched.len() == 1 {
+            text.push_str(&format!(
+                "; policy B holds it at {}",
+                compact_number(b_watched[0])
+            ));
+        }
+        if policy_c_meets_target {
+            text.push_str(&format!(
+                "; policy C keeps registered witness capacity at least {} times registered IDs at every size",
+                sig3(target)
+            ));
+        }
+        text.push_str(&format!(
+            ". Standing witness-peer connections under option 1 grow from {} to {}; option 2 has none, at the cost of the on-demand connections above",
+            a_small.peer_connections_option_1, a_large.peer_connections_option_1
+        ));
+        if decisions_dominate {
+            text.push_str(", which are mostly for miner session decisions");
+        }
+        text.push('.');
+        line(out, &text);
+    }
+    line(
+        out,
+        "- **Household limits**, such as router connection tables and upload bandwidth, are to be measured in M5. This section does not pick a size.",
     );
     blank(out);
 }
 
 fn cross_checks(out: &mut String, results: &M1Results) {
-    line(out, "## 11. Cross-checks");
+    line(out, "## 13. Cross-checks");
     blank(out);
     line(
         out,
@@ -1990,11 +3309,19 @@ fn closing(out: &mut String) {
     );
     line(
         out,
+        "- No incentives: M1 models no rewards, payments or penalties. Sections 11 and 12 assume withholding costs the attacker nothing; M4 adds the ban rules and the [P] rule separating validity from payment.",
+    );
+    line(
+        out,
+        "- Absence rates and durations are illustrative until M3 supplies household downtime profiles.",
+    );
+    line(
+        out,
         "- The modelling assumptions behind every number are in `docs/ASSUMPTIONS.md`; charts are in `charts/`.",
     );
     line(
         out,
-        "- A one-to-two-page brief for a general technical audience is in `M1_PUBLIC_BRIEF.md`.",
+        "- A short brief for a general technical audience is in `M1_PUBLIC_BRIEF.md`.",
     );
 }
 

@@ -4,6 +4,7 @@ description = "Typed configuration for every GrahamBell Stage 1 parameter (SPEC 
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

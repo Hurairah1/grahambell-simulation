@@ -4,6 +4,7 @@ description = "M1 analytical baseline for GrahamBell Stage 1: exact closed-form 
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

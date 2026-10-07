@@ -1,6 +1,6 @@
 # GrahamBell — Stage 1 Simulation Specification
 
-**Version:** 0.3 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05 and 2026-10-06, see the Changelog at the end)
+**Version:** 0.4 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, 2026-10-06 and 2026-10-07, see the Changelog at the end)
 **Owner:** Hurairah Shamsi, Protocol Architect
 **Purpose of this file:** single source of truth for building and running the Stage 1 simulation. Where this file and older papers disagree, **this file wins**. Where this file is silent or ambiguous, the implementer must **stop and ask**, not guess.
 
@@ -66,13 +66,13 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | PoW-ID target interval | 30 s (≈1.05M IDs/yr) | adaptive variant (§3.9) | D / P |
 | Difficulty rule (§3.8) | Variant B: count-based, from the exact admitted online count | Variant A (Bitcoin-style retarget), for comparison | D |
 | Variant A comparison settings (§3.8) | window K = 144 blocks, 4× clamp per retarget | — | D |
-| Variant B correction from recent block times (§3.8) | — | to be proposed and tested in M3 | P |
+| Variant B correction from recent block times (§3.8) | — | no preferred form; M3 proposes one and tests it | P |
 | PoW-Tx interval | 10 s | 1–10 s | O |
 | WC size | 10 | 10 | D |
 | KWC composition | 1 leader + 3 subordinate WCs (40 nodes) | 1 + 2 (30 nodes) for comparison | D |
 | Number of KWCs | equals number of WCs (each WC leads exactly one KWC, subordinate in exactly three) | — | D |
 | KWC ring offsets (§4.2) | 1, 4, 6 | 1, 3 for the 30-node comparison | D |
-| Allocation beacon delay (§4.2) | 6 blocks after the ID's confirmation | 3, 6, 12 | O |
+| Allocation beacon delay (§4.2) | 6 blocks after the ID's confirmation, or after its re-activation is confirmed when a returning ID is re-inserted | 3, 6, 12 | O |
 | Registered-miner PoWit quorum | ≥7 of 10 leader WC **and** ≥21 of 30 subordinates (28 total) | 30-node comparison: ≥7 of 10 leader **and** ≥14 of 20 subordinates (21 total) | D |
 | Unregistered-miner PoWit quorum | any ≥27 of 40 | 30-node comparison: any ≥20 of 30 | D |
 | Entropy signatures | **every online member** of the KWC (online must be ≥ quorum) | — | D |
@@ -85,7 +85,7 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | Convergence interval (admission) | 1 epoch | 0.5–3 epochs | O |
 | Peer bootstrap count (newcomers) | 8 | 4–8 | D |
 | CAC size | 600, first-in first-out | 100–1,000 for comparison | D |
-| CAC seat selection (§4.3) | lottery over the canonical active list, one new member per 10th PoW-Tx block | old rule (miner of every 10th PoW-Tx block), for comparison | D |
+| CAC seat selection (§4.3) | lottery over the canonical active list, one new member per 10th PoW-Tx block; a seat left by a banned or deactivated member is filled by an extra draw at the next 10th PoW-Tx block, at position SHA256("GB/cac" ‖ hash of block B+k ‖ i) with i = 1, 2, … [P] | old rule (miner of every 10th PoW-Tx block), for comparison | D |
 | CAC lottery beacon offset k (§4.3) | 3 blocks | 1, 3, 6, 12 | O |
 | CAC approval threshold | at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600) | — | D |
 | Genesis IDs (G) | 2,900,000 ¹ | 1M, 2.1M, 2.9M, 5M, 10M | D |
@@ -94,6 +94,7 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | Clock tolerance δ | 2 s | 0.5–10 s | O |
 | Offline deactivation threshold | — | 1 h, 6 h, 24 h, 3 d, 7 d | O |
 | Re-activation wait after return | — | 1 d, 7 d, 14 d, 30 d | O |
+| Long-absence threshold L (§4.7) | 30 days (86,400 PoW-ID blocks at 30 s) | 3 d (8,640 blocks), 7 d (20,160), 30 d (86,400), 90 d (259,200), 365 d (1,051,200) | O |
 | Penalty ladder (lesser offences) | 24 h, then 30 days, then permanent | — | D |
 | Minimum attack time floor (adaptive issuance) | 2 years | 1–10 years | P |
 | Adaptive-cap checkpoint interval (§3.9) | T_min | T_min/4, T_min/2, T_min | D |
@@ -175,7 +176,7 @@ The confirmation depth stays as in §2. M1 finds that same-step ties end about 1
 ### 3.8 Difficulty [D; P correction]
 
 - **Variant B (default): count-based.** Per-hash success probability `p = 1 / (admitted online unregistered miners × target interval)`, computed from the exact admitted online count, which admission (§3.1) already tracks.
-- **[P] Variant B correction:** a small correction from recent block times. It is to be proposed and tested in M3; until then Variant B uses the count alone.
+- **[P] Variant B correction:** a small correction from recent block times. There is no preferred form. M3 proposes one and tests it (for example, the target interval ÷ the average interval over the last 144 blocks, bounded to ±10%); until then Variant B uses the count alone.
 - **Variant A (comparison): Bitcoin-style retarget** from recent block times over a window of K = 144 PoW-ID blocks, each retarget clamped to a factor of 4 in either direction.
 
 ### 3.9 Issuance rate [D default, P variant]
@@ -210,7 +211,9 @@ Every registered ID is a witness node in exactly one WC, permanently on duty. A 
 
 Allocation is deterministic and publicly recomputable from chain data. Not even an ID's owner knows its placement when minting. The rationale is in `docs/ARCHITECTURE.md` §8.
 
-**Beacon.** The beacon for an ID is the hash of the PoW-ID block a fixed delay after the ID's confirmation: 6 blocks by default, equal to the confirmation depth (§2). Genesis IDs are allocated first, in registration-index order, using a public launch seed in place of a beacon.
+**Beacon.** The beacon for an ID is the hash of the PoW-ID block a fixed delay after the ID's confirmation: 6 blocks by default, equal to the confirmation depth (§2). A returning ID whose seat was vacated (§4.7) uses the hash of the block the same delay after its re-activation is confirmed. Genesis IDs are allocated first, in registration-index order, using a public launch seed in place of a beacon.
+
+**When placement takes effect [D].** At the ID's beacon block (its confirmation, or its re-activation's confirmation, plus the allocation beacon delay), with no further delay, whether or not an Allocation Committee Block has appeared. Every node computes the placement from chain data.
 
 **Seats: inside-out Fisher–Yates insertion.**
 
@@ -219,8 +222,8 @@ Allocation is deterministic and publicly recomputable from chain data. Not even 
    - If `j = n`, the ID takes seat `n`.
    - Otherwise the ID in seat `j` moves to seat `n`, and the new ID takes seat `j`.
 3. A WC is **active** when all 10 of its seats are filled, so the number of active WCs is `W = ⌊filled seats / 10⌋`. The partial tail WC is **pending**: its members may mine (§3.10) but do not witness until it fills.
-4. **Removal** (ban or deactivation, §4.6–§4.7): the ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring is recomputed.
-5. **Re-activation** re-inserts the ID by step 2. Which block supplies the beacon for a re-insertion is open (§12).
+4. **Removal** (a ban, or a continuous absence longer than the long-absence threshold L, §4.6–§4.7): the ID in the last filled seat moves into the vacated seat. If that empties a seat of the last active WC, that WC returns to pending, `W` decreases by one, and the KWC ring is recomputed. Going offline or being deactivated does not remove an ID from its seat (§4.7).
+5. **Re-insertion.** A returning ID whose seat was vacated is re-inserted by step 2, with the re-activation beacon above. An ID that returns within L never left its seat.
 
 **KWCs: a Golomb-ruler ring.** KWC `w` has leader WC `w` and subordinate WCs `(w + 1)`, `(w + 4)` and `(w + 6)`, all mod `W`. The 30-node comparison uses `(w + 1)` and `(w + 3)`.
 
@@ -233,13 +236,13 @@ Allocation is deterministic and publicly recomputable from chain data. Not even 
 - Each new ID changes the membership of one existing WC and moves one existing ID into the pending tail WC. Chain membership is therefore not fixed. In exchange, every WC's composition tracks the attacker's share of the population, not its share of recent issuance.
 - This replaces the per-ID formula `chain(ID) = f(SHA256(ID ‖ beacon))` and the older rule that a vacancy is filled by a newly registered ID.
 
-**Role of the CAC.** The Allocation Committee publishes the placement in its block. Every node recomputes it and rejects a mismatch. The committee announces the placement but cannot choose it, and rejecting a block cannot produce a different placement.
+**Role of the CAC.** The Allocation Committee records and attests the placement in its block. Placement does not wait for that record (above), so a stalled committee cannot delay it. Every node recomputes the record and rejects a mismatch. The committee cannot choose a placement, and rejecting a block cannot produce a different one.
 
 **[P, optional test]** Diversity constraints within a KWC (for example, no two members from the same /48 or the same network operator).
 
 ### 4.3 Chain Allocation Committee [D]
 
-600 members, first in, first out. 66% approval for an Allocation Committee Block, meaning at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600). Leader rotates. A leader that gets two conflicting blocks approved has both rejected.
+600 members, first in, first out. 66% approval for an Allocation Committee Block, meaning at least two-thirds of members, rounded up: ⌈2n/3⌉ (400 of 600). Leader rotates. A leader that gets two conflicting blocks approved has both rejected. The committee's block is a record and attestation: no placement waits for it (§4.2).
 
 **Seat lottery [D].** For every 10th PoW-Tx block B, the new CAC member is the ID at position SHA256("GB/cac" || hash of block B+k) mod N_active in the canonical active list, where N_active is the length of that list. If that ID is already a member, take the next position, wrapping around, until a non-member is found. The oldest member leaves (first in, first out, unchanged). k = 3 [O] (using a later block limits the influence of whoever mines block B). Every node computes the committee from chain data; nothing extra is broadcast.
 
@@ -247,19 +250,27 @@ Allocation is deterministic and publicly recomputable from chain data. Not even 
 - **Modulo bias.** Hashes are 256-bit, so each position's probability differs from 1/N_active by a relative amount below N_active / 2²⁵⁶. That is below 10⁻⁶⁸ at 10⁹ IDs, and negligible far beyond.
 - **Result.** An attacker's expected share of committee seats equals its share of active IDs. Mining power plays no part.
 
+**Departures [D].** A member that is banned or deactivated leaves the committee at once. An extra lottery draw fills its seat at the next 10th PoW-Tx block, using the same next-position rule. **[P] Extra-draw position:** SHA256("GB/cac" ‖ hash of block B+k ‖ i), where i = 1, 2, … counts the extra draws from the same beacon; the regular draw keeps its formula above.
+
 **Duties of the leader's block.**
 
-- The placement of new and re-activated IDs (§4.2).
+- A record and attestation of the placement of new and re-inserted IDs (§4.2); placement takes effect without it.
 - Committee joins and leaves, which every node can recompute from the lottery.
 - Bans already approved by KWCs, compiled into Master Blacklisting Blocks, one for registered and one for unregistered miners.
 
-**Stalling.** An attacker holding enough seats can stall Allocation Committee Blocks. This is accepted for now, because allocation is deterministic: a stalled committee delays the announcement but cannot change any placement. M4 tests the impact.
+**Stalling.** An attacker holding enough seats can stall Allocation Committee Blocks. A stall delays the committee's record and its compilation of approved bans; it cannot delay or change any placement, which takes effect at each ID's beacon block (§4.2). M4 tests the impact.
 
 **Comparison rule (v0.2).** The miner of every 10th PoW-Tx block joins; if it is already a member, the seat goes to the next 10th-block miner who is not. It is kept only as a labelled comparison in M1.
 
 ### 4.4 Proposers [D]
 
-Each KWC has two rotating proposers, changing every 2 PoW-Tx blocks: a **master** drawn from all 40 members, and a **subordinate-only** proposer drawn from the three subordinate WCs (responsible for MOBu, unregistered offline requests, and banning leader-chain members who refuse to witness newcomers). If a proposer fails to act, the next in rotation does.
+Each KWC has two rotating proposers, changing every 2 PoW-Tx blocks: a **master** drawn from all 40 members, and a **subordinate-only** proposer drawn from the three subordinate WCs. If a proposer fails to act, the next in rotation does.
+
+**Proposer rights [D].**
+
+- **Master proposer:** MOBr, offline requests for registered miners, and ban proposals.
+- **Subordinate-only proposer:** MOBu and offline requests for unregistered miners. As the one exception to the master's ban rights, it may propose bans of leader-chain members who refuse to witness newcomers.
+- **The miner:** its own self-service offline request (§3.2).
 
 ### 4.5 One Chance [D]
 
@@ -272,6 +283,7 @@ If an online member's signature is missing from a miner's aggregate, every other
 - **Miner complaints may trigger a check but never decide a ban.** Witnesses vote (66% of the KWC, meaning at least two-thirds rounded up: 27 of 40) only on behaviour they observed themselves after One Chance.
 - **Voting pool.** The full 40-member KWC votes on bans, MOBu/MOBr and offline requests. The subordinate-only proposer (§4.4) only proposes.
 - **[P] Unreachable is not refusal.** A member that cannot be reached is treated as offline under the allowance; a ban requires proof it refused while demonstrably online. Implement both this rule and the strict alternative (ban on failed One Chance) for comparison.
+- **Conflicting decisions [D].** If two conflicting KWC decisions are both approved, both are rejected. A member who signed both has produced equivocation evidence and may be banned.
 
 ### 4.7 Offline handling [D rules, O values]
 
@@ -280,10 +292,11 @@ Grace epoch; self-service offline requests; forced signing via One Chance for me
 **Offline beyond the allowance leads to deactivation, never a ban.**
 
 - A deactivated ID stops counting as active and leaves the canonical active list (§3.11).
-- It vacates its WC seat by the removal step of §4.2.
-- On return it waits the **re-activation wait**, then is re-inserted into a seat by §4.2 and counts again.
-- Both durations (deactivation threshold, re-activation wait) are [O] and swept (§2).
-- Each deactivation and re-activation changes KWC compositions (§10 H6), so household downtime affects witness-capture odds.
+- **Seat rule [D].** Going offline or being deactivated does not change any seat. A deactivated ID keeps its WC seat as an **offline member** of its KWC: it does not sign, and quorums are met by online members.
+- A seat is vacated (swap-with-last, §4.2) **only** on a ban, or after a continuous absence longer than the **long-absence threshold L** (§2: 30 days [O], which is 86,400 PoW-ID blocks at 30 s).
+- On return an ID waits the **re-activation wait** and counts as active again. If its seat was vacated, it is re-inserted by §4.2, with the beacon of the block 6 blocks after its re-activation is confirmed.
+- The durations (deactivation threshold, re-activation wait, L) are [O] and swept (§2).
+- Only bans and absences longer than L change KWC compositions (§10 H6). Absent members that keep their seats reduce how many members are online to meet quorums; M1 section H maps the honest uptime this requires.
 
 ### 4.8 Penalties [D]
 
@@ -300,6 +313,8 @@ Longest chain; one ID = one channel at 1 hash/s. Modeled only to the extent need
 ## 6. Economic inputs (not design decisions)
 
 Example values per PoW-Tx block: miner 1 Shamsi + ~80% of fees; each signing leader-WC member 0.1 Shamsi + 1.9% of fees (at least 7); CAC leader 0.1 Shamsi + 1% of fees when applicable; public rewards pool (Murphy) 1 Shamsi. **PoW-ID blocks carry no reward.** Token price, hosting prices and bandwidth prices are external parameters.
+
+A [P] proposal to separate PoWit validity from payment is recorded in §12 for M4; the payment rule above is unchanged.
 
 ---
 
@@ -323,7 +338,7 @@ The adversary cannot: break SHA-256, BLS12-381 or VRF security; forge signatures
 - **S6** Difficulty hopping: Variant A versus Variant B.
 - **S7** Adaptive issuance manipulation, with and without the `T_min` cap.
 - **S8** Unregistered-slot exhaustion and honest demand surges.
-- **S9** Honest churn, patience and dropout, and the offline-handling sweep (honest attrition).
+- **S9** Honest churn, patience and dropout, and the offline-handling sweep: deactivation threshold, re-activation wait and long-absence threshold L (honest attrition).
 - **S10** Genesis size sweep, including a fraction of genesis IDs secretly controlled by one party.
 
 **B. Entropy and pacing integrity**
@@ -383,9 +398,10 @@ Thresholds below are proposals. **The architect confirms them before results are
 - **H3 No grinding.** Under S11(e), no strategy reduces the expected winning step relative to an honest miner beyond statistical noise.
 - **H4 No restart advantage.** Under per-round entropy (S5 current), the restart strategy's advantage factor is ≤ 1.05.
 - **H5 Hopping.** Under Variant B, the hopping gain is ≤ 2%; report Variant A's gain.
-- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of KWCs capable of signing without honest members over 10 years at 100,000 KWCs is < 1. Stall fractions are reported without a threshold.
+- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of distinct episodes in which a KWC can sign without honest members, over 10 years at 100,000 KWCs, is < 1. Stall fractions are reported without a threshold.
   - *Meaning:* the attacker's seats alone meet the quorum. Such a KWC still cannot make an early-signed block valid beyond δ, because §3.7 rejects a block received before its own timestamp. Its powers are stalling and censoring miners in that KWC; entropy grinding needs every seat.
-  - *Refresh model:* every KWC composition ever formed counts as an independent draw. Under the §4.2 allocation, compositions form when an ID is inserted (a new or re-activated ID: about 4.7 compositions each) and when an ID is removed (a ban or deactivation: about 4.6 each). The v0.2 count (about R/10 new KWCs per year, plus 4 per ban replacement) is reported as a comparison.
+  - *Primary measure [D]:* **distinct episodes**, the expected number of times a KWC enters the state (entries into the state). Raw compositions in the state are reported as an upper bound.
+  - *Refresh model:* compositions form when an ID is inserted (a new ID, or a returning ID whose seat was vacated: about 4.7 compositions each) and when an ID is removed (a ban, or an absence longer than L: about 4.6 each). Going offline within L changes no composition (§4.7). The v0.2 count (about R/10 new KWCs per year, plus 4 per ban replacement) is reported as a comparison.
   - *Ban rate:* 0 per year in the base case; 1% and 5% of registered IDs per year as labelled sensitivities.
   - Report for both quorums: the unregistered quorum governs PoW-ID, the registered quorum governs PoW-Tx.
 - **H7 Honest attrition.** Under a realistic household downtime profile, IDs lost per year without misbehaviour ≤ 1% for the chosen offline parameters.
@@ -412,7 +428,7 @@ Thresholds below are proposals. **The architect confirms them before results are
 
 - PoW-Tx block interval.
 - Post-admission wait, convergence interval, clock tolerance δ.
-- Offline deactivation and re-activation durations.
+- Offline deactivation and re-activation durations, and the long-absence threshold L.
 - Registered / unregistered capacity split.
 - Strict versus [P] rule for unreachable members (§4.6).
 - Mining-API streaming: format and whether mandatory.
@@ -420,14 +436,44 @@ Thresholds below are proposals. **The architect confirms them before results are
 - Key compromise and revocation (for example, a pre-registered backup key): post-Stage 1.
 - Diversity constraints in allocation.
 - Witness Chain decentralization trigger for Stage 4 (published criteria).
-- Which block supplies the beacon when a re-activated ID is re-inserted (§4.2).
-- Whether a CAC member that is deactivated or banned keeps its committee seat until first-in first-out removes it (§4.3).
-- The Variant B correction from recent block times (§3.8), to be proposed and tested in M3.
-- How often a household ID is deactivated and re-activated per year (§4.7); M3 household downtime profiles supply it.
+- The Variant B correction from recent block times (§3.8): no preferred form; M3 proposes one and tests it.
+- How often a household ID is absent per year and how long absences last (§4.7); M3 household downtime profiles supply them.
+- **The leader-WC requirement is the main stall risk for registered KWCs.** The registered PoWit needs 7 of the leader WC's 10 members as well as 21 of the 30 subordinates; M1 section H shows this fails far more often under honest downtime than any 27 of 40. M4 compares it with a single 27-of-40 rule, together with the forced-signing (§4.5) and ban (§4.6) rules.
+- **[P] Separate validity from payment (M4).** Any 27 of 40 signatures make a PoWit valid, with no separate leader-WC requirement. A leader-WC member is paid only if its own signature is in the PoWit. The reward share of a leader member who did not sign is never generated: it is not created and does not go to the miner, so no one gains by omitting signatures. M4 compares this rule with 7 + 21 on liveness (M1 section H), on the incentive for leaders to stay online and sign, and on total issuance per block. The payment rule of §6 is unchanged until then.
+- **[P] Raising the attacker share that ID issuance can tolerate without relying on bans (M2/M4):**
+  - (a) **Split rule:** a lower quorum for PoWits only, for example 51%, since validators recompute every PoWit (§3.7). M1 section G maps it.
+  - (b) **Larger KWCs**, for example 60 or 100 seats. M1 section I maps the trade-off.
+  - (c) **Threshold BLS entropy:** any quorum of members produce the same signature, which removes the single-member entropy stall and entropy grinding. M2 measures the key-setup cost.
+  - Decisions that validators cannot recompute (bans, MOBu/MOBr, offline requests, committee records) remain bound by the one-third limit and rely on the ban rules.
+- **[P] Witness peer topology (option 2).** No persistent witness-to-witness connections: the miner relays routine messages. Members connect on demand, through the global directory of member addresses, only for One Chance, decisions (MOBu/MOBr, offline requests, bans), proposer duties and catch-up. Online status comes from the network record, not from heartbeats: a member counts as online until an offline request is recorded, by the member itself or by its KWC proposer after One Chance fails. Address changes are announced network-wide and update the directory. M1 section I estimates the on-demand connections; M3/M4 measure how often a member that disappears without announcing it stalls its KWCs' entropy until One Chance fails (about one grace epoch). The alternative is persistent connections among all members of a node's KWCs.
 
 ---
 
 ## Changelog
+
+### v0.4 — 2026-10-07
+
+Decisions by the protocol architect, recorded after reviewing the M1.1 results.
+
+- **§4.7 and §4.2 seat rule [D].**
+  - Going offline or being deactivated no longer changes any seat. A deactivated ID keeps its WC seat as an offline member: it does not sign, and quorums are met by online members.
+  - A seat is vacated (swap-with-last) only on a ban or after a continuous absence longer than the long-absence threshold L.
+  - A returning ID whose seat was vacated is re-inserted by Fisher–Yates, with the beacon 6 blocks after its re-activation is confirmed.
+  - This replaces v0.3's "deactivation vacates the seat".
+  - Reason: under v0.3 every absence long enough to deactivate an ID changed about 9.3 KWC compositions (a removal and a re-insertion). Under v0.4 only absences longer than L do (M1.2 table B5).
+- **§2 new row: long-absence threshold L** = 30 days [O] (86,400 PoW-ID blocks at 30 s), sweep 3, 7, 30, 90 and 365 days. The allocation beacon row now covers re-insertion. **§8 S9** adds L to the offline-handling sweep.
+- **§4.2 placement takes effect without the committee [D]**, at the ID's beacon block (its confirmation plus the allocation beacon delay), with no further delay. **§4.3:** the Allocation Committee Block becomes a record and attestation only, so a stall cannot delay placement. Reason: every node computes placement from chain data, so a committee stall need not hold it up.
+- **§4.3 departures [D].** A banned or deactivated member leaves the committee at once; an extra lottery draw fills its seat at the next 10th PoW-Tx block. The extra draw's position [P] is SHA256("GB/cac" ‖ hash of block B+k ‖ i), with i = 1, 2, … counting extra draws from the same beacon; the regular draw keeps its formula. Reason: a draw from the same beacon without a counter would land on the first draw's position.
+- **§4.4 proposer rights [D].** The master proposer proposes MOBr, registered offline requests and bans. The subordinate-only proposer proposes MOBu and unregistered offline requests, and keeps one exception: bans of leader-chain members who refuse to witness newcomers. The miner makes its own self-service offline request.
+- **§4.6 conflicting decisions [D].** If two conflicting KWC decisions are both approved, both are rejected, and a member who signed both has produced equivocation evidence and may be banned. Reason: a conflict then cancels a decision rather than enacting two (M1 section G).
+- **§3.8.** The Variant B correction stays [P] with no preferred form; M3 proposes and tests one.
+- **§10 H6.** The primary measure is now distinct episodes (entries into the state); raw compositions are an upper bound. Compositions follow the v0.4 seat rule. Reason: consecutive compositions share all but one seat, so counting each as an independent draw counts one episode several times.
+- **§2 quorums unchanged** (27 of 40; 7 + 21; ⌈2n/3⌉ for the committee). **§12** records that the leader-WC requirement (7 of 10) is the main stall risk for registered KWCs, for M4 to compare with a single 27-of-40 rule together with the forced-signing and ban rules.
+- **§12 new [P] proposals:**
+  - separate PoWit validity from payment (any 27 of 40 makes a PoWit valid; an unsigned leader member's share is never generated), for M4; **§6** gains a pointer, and the payment rule is unchanged;
+  - three ways to raise the attacker share that ID issuance can tolerate without relying on bans: the split rule, larger KWCs and threshold BLS entropy, for M2/M4;
+  - witness peer topology option 2: no persistent witness-to-witness connections, on-demand connections through the global directory, online status from the network record.
+- **§12 housekeeping.** Removed the answered questions (the re-insertion beacon, committee seats of deactivated or banned members, the Variant B form). Added the absence-duration question, the long-absence threshold, and the proposals above.
 
 ### v0.3 — 2026-10-06
 

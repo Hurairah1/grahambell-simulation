@@ -1,5 +1,4 @@
-//! `M1_PUBLIC_BRIEF.md`: a one-to-two-page brief on the M1 results for a general technical
-//! audience.
+//! `M1_PUBLIC_BRIEF.md`: a short brief on the M1 results for a general technical audience.
 //!
 //! The brief reads only exact tables: no Monte Carlo value, seed or commit appears in it. The
 //! same configuration therefore always produces the same brief, so the copy committed at
@@ -10,8 +9,10 @@
 use crate::charts::{compact_number, short_count};
 use crate::summary::{DISCLOSURE, prob, share, sig3, t_min_multiple};
 use gb_analytic::M1Results;
+use gb_analytic::allocation::{SeatRule, absence_models};
 use gb_analytic::cac::CommitteeModel;
-use gb_analytic::restart::REALISTIC_COST;
+use gb_analytic::quorum_feasibility::{REGISTERED, UNREGISTERED};
+use gb_analytic::restart::{REALISTIC_COST, realistic_restart_cost_s};
 use gb_analytic::time_threshold::CAP_CONFIGURED;
 use gb_analytic::witness::KwcState;
 use gb_config::Config;
@@ -63,7 +64,7 @@ pub fn render_brief(config: &Config, results: &M1Results) -> String {
     line(
         &mut out,
         &format!(
-            "M1 computes exact formulas and exact probabilities for the rules in SPEC v0.3: how long an attacker needs to reach a share of active IDs, how likely a randomly composed Witness Chain group is to fall under its control, how often the allocation committee can be stalled or captured, and whether restarting or hopping difficulty helps. Independent methods (exhaustive enumeration, dynamic programming, log-space arithmetic, seeded Monte Carlo) cross-check the results. The default genesis distribution is {} IDs.",
+            "M1 computes exact formulas and exact probabilities for the rules in SPEC v0.4: how long an attacker needs to reach a share of active IDs, how likely a randomly composed Witness Chain group is to fall under its control, how often honest downtime leaves a group unable to approve, how often the allocation committee can be stalled or captured, and whether restarting or hopping difficulty helps. Independent methods (exhaustive enumeration, dynamic programming, log-space arithmetic, seeded Monte Carlo) cross-check the results. The default genesis distribution is {} IDs.",
             short_count(genesis)
         ),
     );
@@ -73,7 +74,8 @@ pub fn render_brief(config: &Config, results: &M1Results) -> String {
     honest_majority(&mut out, config, results);
     worst_case(&mut out, config, results);
     restart(&mut out, results);
-    witness(&mut out, results);
+    witness(&mut out, config, results);
+    honest_uptime(&mut out, config, results);
     design_changes(&mut out, config, results);
     limitations(&mut out);
     out
@@ -259,7 +261,7 @@ fn restart(out: &mut String, results: &M1Results) {
         line(
             out,
             &format!(
-                "In an earlier design a miner's entropy stayed fixed for its whole connection, so it could compute its winning steps at once and reconnect until one fell soon. At the realistic restart cost of {} s (grace epoch, convergence interval and post-admission wait) and a one-day keep window, that gave {:.1}× the honest rate with {} competing miners and {:.1}× with {} (up to {:.1}× and {:.1}× with the best keep window). The current design draws fresh entropy every round, a miner may use one header per round, and abandoning it means waiting for the next block. Every connected miner then wins each round with the same probability, so no restart policy beats staying connected: the best advantage is exactly 1.",
+                "In an earlier design a miner's entropy stayed fixed for its whole connection, so it could compute its winning steps at once and reconnect until one fell soon. At the realistic restart cost of {} s and a one-day keep window, that gave {:.1}× the honest rate with {} competing miners and {:.1}× with {} (up to {:.1}× and {:.1}× with the best keep window). The current design draws fresh entropy every round and allows one header per round, so every connected miner wins each round with the same probability and no restart policy beats staying connected: the best advantage is exactly 1.",
                 compact_number(small.restart_cost_s),
                 small.advantage_old_design,
                 short_count(small.competing_miners),
@@ -273,7 +275,7 @@ fn restart(out: &mut String, results: &M1Results) {
     }
 }
 
-fn witness(out: &mut String, results: &M1Results) {
+fn witness(out: &mut String, config: &Config, results: &M1Results) {
     line(
         out,
         "## Witness Chains: capture odds and what each state enables",
@@ -323,29 +325,160 @@ fn witness(out: &mut String, results: &M1Results) {
         ],
         &body,
     );
-    let ten_year = results.b.compositions.iter().find(|r| {
-        r.miner_kind == "unregistered"
-            && r.attacker_fraction == 0.25
-            && r.initial_kwcs == 100_000
-            && r.ban_rate_per_year == 0.0
-            && r.deactivation_cycles_per_id_per_year == 0.0
+    let ten_year = |kind: &str| {
+        results.b.compositions.iter().find(|r| {
+            r.miner_kind == kind
+                && r.attacker_fraction == 0.25
+                && r.initial_kwcs == 100_000
+                && r.ban_rate_per_year == 0.0
+        })
+    };
+    let models = absence_models(config);
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let days = config.offline.long_absence_threshold_s.value / 86_400.0;
+    let rule = SeatRule::V04 {
+        long_absence_days: days,
+    }
+    .label();
+    let seat_rule = models.first().and_then(|model| {
+        results.b.seat_rule.iter().find(|r| {
+            r.miner_kind == "unregistered"
+                && r.attacker_fraction == 0.25
+                && r.initial_kwcs == 100_000
+                && r.duration_model == model.label()
+                && r.absences_per_id_per_year == c
+                && r.seat_rule == rule
+        })
     });
-    if let Some(r) = ten_year {
+    if let (Some(r), Some(registered), Some(seats)) =
+        (ten_year("unregistered"), ten_year("registered"), seat_rule)
+    {
         line(
             out,
             &format!(
-                "Group membership changes as IDs join and leave. Counting every group composition formed over {} years from 100,000 groups ({} compositions) as an independent draw, the expected number able to sign without honest members at p = 25% is {} for ID issuance. Most consecutive compositions differ by one seat, so this counts one long episode several times; household downtime, which now changes seats, raises the count.",
+                "Over {} years from 100,000 groups, the expected number of distinct episodes in which a group can sign without honest members at p = 25% is {} for ID issuance and {} for transactions (counting every changed composition as a fresh draw, as M1.1 did, gives {} for ID issuance). Under SPEC v0.4 going offline no longer moves seats: only a ban or an absence longer than L = {} days does. With an illustrative {} absences per ID per year that leaves {:.1}% of the seat changes of the v0.3 rule.",
                 compact_number(r.horizon_years),
-                compact_number(r.compositions),
-                sig3(r.expected_sign_capable)
+                sig3(r.expected_sign_episodes),
+                sig3(registered.expected_sign_episodes),
+                sig3(r.expected_sign_compositions_upper_bound),
+                compact_number(days),
+                compact_number(c),
+                100.0 * seats.compositions_ratio_to_v03
             ),
         );
         blank(out);
     }
 }
 
+fn honest_uptime(out: &mut String, config: &Config, results: &M1Results) {
+    let h = &results.h;
+    let minimum = |layout: &str, p: f64| {
+        h.minimum_uptime
+            .iter()
+            .find(|r| r.layout == layout && r.attacker_fraction == p && r.failure_target == 0.01)
+    };
+    let (Some(pool), Some(registered)) = (minimum(UNREGISTERED, 0.0), minimum(REGISTERED, 0.0))
+    else {
+        return;
+    };
+    let (Some(f_pool), Some(f_registered)) = (
+        pool.minimum_online_fraction,
+        registered.minimum_online_fraction,
+    ) else {
+        return;
+    };
+    let first_unreachable = |layout: &str| {
+        let mut rows: Vec<_> = h
+            .minimum_uptime
+            .iter()
+            .filter(|r| r.layout == layout && r.failure_target == 0.01)
+            .collect();
+        rows.sort_by(|a, b| a.attacker_fraction.total_cmp(&b.attacker_fraction));
+        rows.into_iter()
+            .find(|r| r.minimum_online_fraction.is_none())
+    };
+    line(out, "## Honest uptime");
+    blank(out);
+    let mut text = format!(
+        "A group approves only when enough members sign, and absent members now keep their seats. Without an attacker, keeping fewer than 1% of groups unable to approve needs honest members online {:.2}% of the time for ID issuance (any {}) but {:.2}% for transactions ({}), because {} of the {} leader-WC members must also sign; a single {} rule, proposed for M4, would close that gap.",
+        100.0 * f_pool,
+        pool.approvals,
+        100.0 * f_registered,
+        registered.approvals,
+        config.quorum.registered_leader_min.value,
+        config.witness.wc_size.value,
+        pool.approvals.replace(' ', "-")
+    );
+    if let (Some(a), Some(b)) = (
+        first_unreachable(UNREGISTERED),
+        first_unreachable(REGISTERED),
+    ) {
+        text.push_str(&format!(
+            " If attacker members withhold, no uptime keeps transaction groups under 1% from an attacker share of {} ({} fail even at full uptime), or issuance groups from {}; this assumes withholding is free, whereas the protocol bans an online member that refuses after One Chance (modelled in M4).",
+            share(b.attacker_fraction),
+            prob(&b.p_fail_at_full_uptime),
+            share(a.attacker_fraction)
+        ));
+    }
+    text.push_str(&format!(
+        " A failing group is local: its miners move to another group after about {} s, and the rest of the network continues.",
+        compact_number(realistic_restart_cost_s(config))
+    ));
+    let days = config.offline.long_absence_threshold_s.value / 86_400.0;
+    let c = config
+        .analytic
+        .absence
+        .absences_per_id_per_year
+        .iter()
+        .copied()
+        .fold(0.0, f64::max);
+    let departures = config
+        .analytic
+        .absence
+        .departures_per_id_per_year
+        .iter()
+        .copied()
+        .filter(|a| *a > 0.0)
+        .fold(f64::INFINITY, f64::min);
+    let models = absence_models(config);
+    let absent = models.first().and_then(|model| {
+        h.absent_seats.iter().find(|r| {
+            r.layout == REGISTERED
+                && r.attacker_fraction == 0.0
+                && r.failure_target == 0.01
+                && r.duration_model == model.label()
+                && r.absences_per_id_per_year == c
+                && r.departures_per_id_per_year == departures
+                && r.long_absence_days == days
+        })
+    });
+    if let Some(r) = absent
+        && let Some(needed) = r.required_ordinary_uptime
+    {
+        text.push_str(&format!(
+            " At L = {} days, with an illustrative {} absences and {} permanent departures per ID per year, absent IDs hold {:.1}% of seats, and transaction groups need {:.2}% uptime among members present.",
+            compact_number(days),
+            compact_number(c),
+            share(departures),
+            100.0 * r.absent_seat_share,
+            libm::ceil(10_000.0 * needed) / 100.0
+        ));
+    }
+    line(out, &text);
+    blank(out);
+}
+
 fn design_changes(out: &mut String, config: &Config, results: &M1Results) {
-    line(out, "## Design changes made because of M1 (SPEC v0.3)");
+    line(
+        out,
+        "## Design changes made because of M1 (SPEC v0.3 and v0.4)",
+    );
     blank(out);
     let previous = GENESIS_V02;
     if let Some(needed) = results
@@ -404,8 +537,7 @@ fn design_changes(out: &mut String, config: &Config, results: &M1Results) {
         line(
             out,
             &format!(
-                "- **Committee seats by lottery.** Seats on the {size}-member allocation committee now go by lottery over active IDs instead of to block miners. Under the old rule an attacker with 25% of active IDs, mining with all of them while half of honest IDs mine, held {:.1}% of mining IDs and could stall the committee with probability {}; under the lottery that probability is {}.",
-                100.0 * old.attacker_share_of_population,
+                "- **Committee seats by lottery.** Seats on the {size}-member allocation committee now go by lottery over active IDs instead of to block miners. Under the old rule an attacker with 25% of active IDs, mining with all of them while half of honest IDs mine, could stall the committee with probability {}; under the lottery, {}.",
                 prob(&old.p_stall),
                 prob(&lottery.p_stall)
             ),
@@ -413,15 +545,15 @@ fn design_changes(out: &mut String, config: &Config, results: &M1Results) {
     }
     line(
         out,
-        "- **Allocation.** Seats are assigned by a deterministic shuffle that every node recomputes from chain data, so the committee announces placements but cannot choose them. Every group's composition then tracks the attacker's share of all IDs, not its share of recent issuance.",
+        "- **Allocation.** Seats come from a deterministic shuffle that every node recomputes from chain data, so each group's composition tracks the attacker's share of all IDs, not of recent issuance.",
     );
     line(
         out,
-        "- **Deactivation instead of bans.** An ID offline beyond the allowance is deactivated and can return; bans are reserved for proven misbehaviour.",
+        "- **Downtime and the adaptive cap.** An ID offline beyond the allowance is deactivated and can return; bans are reserved for proven misbehaviour. The optional adaptive rate gains the safety factor k = 7/6.",
     );
     line(
         out,
-        "- **Adaptive cap.** The optional adaptive rate gains the safety factor k = 7/6 described above.",
+        "- **v0.4.** Going offline no longer moves seats; placement no longer waits for the committee; two conflicting group decisions that are both approved are both rejected, exposing every member who signed both.",
     );
     blank(out);
 }
@@ -439,15 +571,15 @@ fn limitations(out: &mut String) {
     );
     line(
         out,
-        "- **Idealised assignment.** Witness seats and committee draws are modelled as uniformly random, and group compositions are counted as independent draws. Simulations must confirm both.",
+        "- **Idealised assignment.** Witness seats and committee draws are modelled as uniformly random, and episode counts treat replaced WCs as fresh draws. Simulations must confirm both.",
     );
     line(
         out,
-        "- **No money costs yet.** The cost of sustaining an attacker share comes in M5.",
+        "- **No money costs or incentives yet.** The cost of sustaining an attacker share comes in M5; rewards and penalties, including bans for withholding signatures, in M4.",
     );
     line(
         out,
-        "- **Open parameters.** Several SPEC values (for example offline durations and the transaction-block interval) are still open and are swept.",
+        "- **Open parameters.** Several SPEC values (for example offline durations, the long-absence threshold L and the transaction-block interval) are still open and are swept; absence rates and durations are illustrative until M3.",
     );
     blank(out);
     line(

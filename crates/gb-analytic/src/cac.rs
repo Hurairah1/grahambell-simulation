@@ -5,6 +5,11 @@
 //! **stall** the committee when it holds `n − a + 1` seats, and **capture** it (approve
 //! without honest members) when it holds `a` seats.
 //!
+//! Since SPEC v0.4 (§4.2–§4.3) placement takes effect at each ID's beacon block without the
+//! committee; the Allocation Committee Block is a record and attestation only. A stall
+//! therefore delays the record, never a placement, and a captured committee cannot choose
+//! one: every node recomputes placement and rejects a mismatch.
+//!
 //! # Seat rules
 //!
 //! - **Lottery (SPEC v0.3, primary).** The new member is the ID at a hash-derived position of
@@ -46,11 +51,25 @@
 //!   and in hours using the seconds per refresh.
 //! - **The M1 brief's estimate (comparison only):** one independent composition per `n`
 //!   refreshes, so events per year ≈ (refreshes per year / `n`) × `P(state)`.
+//!
+//! # Departures (SPEC v0.4, table C3)
+//!
+//! A banned or deactivated member leaves at once, and an extra lottery draw fills its seat at
+//! the next 10th PoW-Tx block. Attacker IDs never go offline, while an honest member
+//! deactivates during a refresh interval with probability `δ = 1 − e^(−c/R)` for absences
+//! starting at rate `c` per ID per year and `R` refreshes per year. An honest member's mean
+//! tenure is then `r = (1 − (1 − δ)^n)/(nδ)` times the full tenure of `n` refreshes. New
+//! members arrive in proportion `p : (1 − p)` (the lottery draws from active IDs, so `p` is the
+//! attacker's share of active IDs, as in C1), and by Little's law the attacker's seat share is
+//! `p / (p + (1 − p)·r)`. C3 evaluates the C1 stall and capture probabilities at that share.
+//! This is an approximation: it ignores the seats left empty until the next 10th block and the
+//! small shortening of every tenure by departures ahead in the queue. M4 simulates the
+//! committee itself.
 
 use crate::dist::{ExactDistribution, SeatModel};
 use crate::error::{AnalyticError, Result, ensure};
 use crate::exact::{Q, decimal, integer, log10, ratio, scientific, to_f64};
-use crate::mc::{RunningStats, shuffle, uniform_below};
+use crate::mc::{RunningStats, bernoulli, geometric_failures, shuffle, uniform_below};
 use crate::validation::Check;
 use crate::witness::attacker_ids;
 use gb_config::Config;
@@ -258,6 +277,28 @@ pub fn mean_episode_refreshes(time_fraction: &Q, onset: &Q) -> Option<f64> {
     (!onset.is_zero()).then(|| to_f64(&(time_fraction / onset)))
 }
 
+/// Probability that an honest member deactivates during one refresh interval, for absences
+/// starting as a Poisson process at `absences_per_year`: `1 − e^(−c/R)`.
+pub fn departure_probability_per_refresh(absences_per_year: f64, refreshes_per_year: f64) -> f64 {
+    -libm::expm1(-absences_per_year / refreshes_per_year)
+}
+
+/// An honest member's mean tenure relative to the full tenure of `members` refreshes, when it
+/// leaves early with probability `delta` per refresh: `(1 − (1 − δ)^n)/(n·δ)`.
+pub fn honest_tenure_ratio(members: u64, delta: f64) -> f64 {
+    if delta <= 0.0 {
+        return 1.0;
+    }
+    let n = members as f64;
+    -libm::expm1(n * libm::log1p(-delta)) / (n * delta)
+}
+
+/// Attacker's committee seat share by Little's law, with arrivals in proportion `p : (1 − p)`
+/// and tenures in proportion `1 : ratio`.
+pub fn effective_share(p: f64, ratio: f64) -> f64 {
+    p / (p + (1.0 - p) * ratio)
+}
+
 // ----------------------------------------------------------------------------- tables
 
 /// C1: probability of stalling and capture, with mean episode lengths.
@@ -334,6 +375,40 @@ pub struct EventsRow {
     pub ratio_exact_to_brief_estimate: f64,
 }
 
+/// C3: the committee when honest members deactivate while serving (SPEC v0.4 §4.3).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DepartureRow {
+    /// Committee size n (the SPEC default).
+    pub committee_size: u64,
+    /// Attacker fraction p of active IDs.
+    pub attacker_fraction: f64,
+    /// Absences (deactivations) per honest ID per year; attacker IDs never go offline.
+    pub absences_per_id_per_year: f64,
+    /// Committee refreshes per year.
+    pub refreshes_per_year: f64,
+    /// Full tenure, n refreshes, in hours.
+    pub tenure_hours: f64,
+    /// Probability that an honest member deactivates during a full tenure.
+    pub honest_departure_probability: f64,
+    /// An honest member's mean tenure ÷ the full tenure, r.
+    pub honest_tenure_ratio: f64,
+    /// The attacker's seat share, p / (p + (1 − p)·r).
+    pub effective_attacker_share: f64,
+    /// P(stall) at p (hypergeometric over active IDs, as C1).
+    pub p_stall_at_p: String,
+    /// P(stall) at the effective share.
+    pub p_stall_at_effective_share: String,
+    /// P(capture) at p.
+    pub p_capture_at_p: String,
+    /// P(capture) at the effective share.
+    pub p_capture_at_effective_share: String,
+    /// How the share is modelled.
+    pub model: &'static str,
+}
+
+/// Label of the C3 model.
+pub const DEPARTURE_MODEL: &str = "Little's law approximation (M4 simulates)";
+
 /// All section C tables.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SectionC {
@@ -341,6 +416,8 @@ pub struct SectionC {
     pub odds: Vec<OddsRow>,
     /// C2.
     pub events: Vec<EventsRow>,
+    /// C3.
+    pub departures: Vec<DepartureRow>,
 }
 
 /// Committee models for one committee size and attacker fraction: the two lottery layouts,
@@ -461,7 +538,62 @@ pub fn section_c(config: &Config) -> Result<SectionC> {
             }
         }
     }
+    tables.departures = departure_rows(config)?;
     Ok(tables)
+}
+
+fn departure_rows(config: &Config) -> Result<Vec<DepartureRow>> {
+    let grid = &config.analytic.cac;
+    let members = u64::from(config.cac.size.value);
+    let approvals = approvals_needed(members, &config.cac.approval_threshold.value)?;
+    let stall = stall_seats(members, approvals);
+    let tx_interval = decimal(config.transactions.pow_tx_interval_s.value)?;
+    let join_every = u64::from(config.cac.join_every_n_tx_blocks.value);
+    let refreshes = to_f64(&tenth_blocks_per_year(
+        config.model.seconds_per_year,
+        &tx_interval,
+        join_every,
+    ));
+    let population = grid.active_population;
+    let tenure_hours = members as f64 * config.model.seconds_per_year as f64 / refreshes / 3_600.0;
+    let mut rows = Vec::new();
+    for p_f in &grid.attacker_fractions {
+        let at_p = seat_distribution(
+            members,
+            &CommitteeModel::LotterySpread {
+                population,
+                attackers: attacker_ids(&decimal(*p_f)?, population),
+            },
+        )?;
+        for &c in &config.analytic.absence.absences_per_id_per_year {
+            let delta = departure_probability_per_refresh(c, refreshes);
+            let ratio = honest_tenure_ratio(members, delta);
+            let share = effective_share(*p_f, ratio);
+            let at_share = seat_distribution(
+                members,
+                &CommitteeModel::LotterySpread {
+                    population,
+                    attackers: attacker_ids(&decimal(share)?, population),
+                },
+            )?;
+            rows.push(DepartureRow {
+                committee_size: members,
+                attacker_fraction: *p_f,
+                absences_per_id_per_year: c,
+                refreshes_per_year: refreshes,
+                tenure_hours,
+                honest_departure_probability: -libm::expm1(members as f64 * libm::log1p(-delta)),
+                honest_tenure_ratio: ratio,
+                effective_attacker_share: share,
+                p_stall_at_p: scientific(&at_p.at_least(stall), 6),
+                p_stall_at_effective_share: scientific(&at_share.at_least(stall), 6),
+                p_capture_at_p: scientific(&at_p.at_least(approvals), 6),
+                p_capture_at_effective_share: scientific(&at_share.at_least(approvals), 6),
+                model: DEPARTURE_MODEL,
+            });
+        }
+    }
+    Ok(rows)
 }
 
 // ----------------------------------------------------------------------------- checks
@@ -584,7 +716,100 @@ pub fn checks(config: &Config) -> Result<Vec<Check>> {
     let mut checks = vec![binomial_onset_identity_check()?, flow_balance_check()?];
     checks.extend(lottery_monte_carlo_checks(config)?);
     checks.extend(tenth_block_monte_carlo_checks(config)?);
+    checks.extend(departure_monte_carlo_checks(config));
     Ok(checks)
+}
+
+/// A new committee member: the attacker's with probability `p`; an honest one also gets the
+/// refresh at which it would leave early. It leaves during the `k`-th interval after joining
+/// (`k ≥ 1`) with probability `(1 − δ)^(k−1)·δ`, so before the record at `step + k`.
+fn departing_joiner<R: rand_core::Rng + ?Sized>(
+    rng: &mut R,
+    step: u64,
+    p: f64,
+    delta: f64,
+) -> (bool, u64) {
+    if bernoulli(rng, p) {
+        (true, u64::MAX)
+    } else {
+        (false, step + 1 + geometric_failures(rng, delta))
+    }
+}
+
+/// Simulates a FIFO committee of `members` whose honest members leave early with probability
+/// `delta` per refresh interval. At each refresh the regular draw joins, the oldest leaves and
+/// one extra draw fills each seat vacated since the last refresh. Returns batch means of the
+/// attacker's seat share after each refresh.
+fn simulate_departures(
+    seed: u64,
+    label: &str,
+    members: u64,
+    p: f64,
+    delta: f64,
+    refreshes: u64,
+) -> RunningStats {
+    const BATCHES: u64 = 50;
+    let mut rng = rng_stream(seed, label);
+    let mut queue: VecDeque<(bool, u64)> = (0..members)
+        .map(|_| departing_joiner(&mut rng, 0, p, delta))
+        .collect();
+    let burn_in = 20 * members;
+    let batch_size = refreshes / BATCHES;
+    let mut stats = RunningStats::default();
+    let mut batch = 0.0;
+    for step in 1..=burn_in + batch_size * BATCHES {
+        let before = queue.len();
+        queue.retain(|(_, leave)| *leave != step);
+        let departed = before - queue.len();
+        queue.push_back(departing_joiner(&mut rng, step, p, delta));
+        queue.pop_front();
+        for _ in 0..departed {
+            queue.push_back(departing_joiner(&mut rng, step, p, delta));
+        }
+        if step <= burn_in {
+            continue;
+        }
+        batch += queue.iter().filter(|(attacker, _)| *attacker).count() as f64 / members as f64;
+        if (step - burn_in) % batch_size == 0 {
+            stats.push(batch / batch_size as f64);
+            batch = 0.0;
+        }
+    }
+    stats
+}
+
+/// The departure cases simulated: committee size, attacker share and per-refresh departure
+/// probability. The departure probabilities are far above the C3 values (about 1e-5) so that
+/// the effect is many standard errors wide.
+const DEPARTURE_CASES: [(u64, f64, f64); 2] = [(30, 0.3, 0.004), (30, 0.25, 0.004)];
+
+fn departure_monte_carlo_checks(config: &Config) -> Vec<Check> {
+    let mc = &config.run.monte_carlo;
+    DEPARTURE_CASES
+        .iter()
+        .map(|&(members, p, delta)| {
+            let id = format!("C-mc-departures-n{members}-p{p}");
+            let stats = simulate_departures(
+                config.run.seed,
+                &id,
+                members,
+                p,
+                delta,
+                mc.committee_refreshes,
+            );
+            Check::monte_carlo(
+                "C",
+                &id,
+                &format!(
+                    "committee with honest departures (n={members}, p={p}, departure probability {delta} per refresh, extra draws at the next refresh): simulated attacker seat share vs p/(p + (1-p)r)"
+                ),
+                effective_share(p, honest_tenure_ratio(members, delta)),
+                stats.estimate(),
+                mc.tolerance_standard_errors,
+                0.0,
+            )
+        })
+        .collect()
 }
 
 fn binomial_onset_identity_check() -> Result<Check> {
@@ -978,6 +1203,39 @@ mod tests {
         // (23.94 refreshes).
         let hours = row.mean_stall_hours.unwrap();
         assert!((hours - 0.664_900_352_341_196_8).abs() < 1e-9, "{hours}");
+    }
+
+    #[test]
+    fn departures_raise_the_attacker_share_by_little_more_than_a_tenth_of_a_point() {
+        // Plan preview: 4 absences per ID per year at R = 315,360 refreshes (10 s PoW-Tx
+        // blocks, every 10th) and n = 600 give r ≈ 1 − nδ/2 and a share of about 25.07% at
+        // p = 25%.
+        let delta = departure_probability_per_refresh(4.0, 315_360.0);
+        assert!((delta - 4.0 / 315_360.0).abs() < 1e-9);
+        let r = honest_tenure_ratio(600, delta);
+        assert!((r - (1.0 - 600.0 * delta / 2.0)).abs() < 1e-4);
+        let share = effective_share(0.25, r);
+        assert!((share - 0.2507).abs() < 0.0001, "{share}");
+        assert_eq!(honest_tenure_ratio(600, 0.0), 1.0);
+        assert_eq!(effective_share(0.25, 1.0), 0.25);
+    }
+
+    #[test]
+    fn departure_rows_cover_every_share_and_absence_rate() {
+        let config = Config::default();
+        let rows = departure_rows(&config).unwrap();
+        assert_eq!(
+            rows.len(),
+            config.analytic.cac.attacker_fractions.len()
+                * config.analytic.absence.absences_per_id_per_year.len()
+        );
+        let row = rows
+            .iter()
+            .find(|r| r.attacker_fraction == 0.25 && r.absences_per_id_per_year == 4.0)
+            .unwrap();
+        // 600 refreshes of 100 s.
+        assert!((row.tenure_hours - 600.0 * 100.0 / 3_600.0).abs() < 1e-9);
+        assert!(row.effective_attacker_share > 0.25);
     }
 
     #[test]

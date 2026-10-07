@@ -525,6 +525,9 @@ pub struct Offline {
     pub deactivation_threshold_s: Param<Option<f64>>,
     /// Wait before a returning ID is re-activated, in seconds ("—" until chosen).
     pub reactivation_wait_s: Param<Option<f64>>,
+    /// Long-absence threshold L, in seconds: a seat is vacated only after a continuous absence
+    /// longer than this (or a ban).
+    pub long_absence_threshold_s: Param<f64>,
 }
 
 impl Default for Offline {
@@ -547,6 +550,15 @@ impl Default for Offline {
                 Some(14.0 * DAY),
                 Some(30.0 * DAY),
             ])),
+            long_absence_threshold_s: Param::with_status(30.0 * DAY, Status::O).swept(
+                Sweep::values(vec![
+                    3.0 * DAY,
+                    7.0 * DAY,
+                    30.0 * DAY,
+                    90.0 * DAY,
+                    365.0 * DAY,
+                ]),
+            ),
         }
     }
 }
@@ -641,6 +653,18 @@ mod tests {
         let genesis = Genesis::default();
         assert_eq!(genesis.ids.value, 2_900_000);
         assert_eq!(genesis.ids.status, Status::D);
+    }
+
+    #[test]
+    fn long_absence_threshold_defaults_to_thirty_days_and_is_open() {
+        let offline = Offline::default();
+        assert_eq!(offline.long_absence_threshold_s.value, 2_592_000.0);
+        assert_eq!(offline.long_absence_threshold_s.status, Status::O);
+        let sweep = offline.long_absence_threshold_s.sweep.unwrap();
+        assert_eq!(
+            sweep.values,
+            vec![259_200.0, 604_800.0, 2_592_000.0, 7_776_000.0, 31_536_000.0]
+        );
     }
 
     #[test]

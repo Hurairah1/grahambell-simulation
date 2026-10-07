@@ -82,9 +82,6 @@ pub struct WitnessGrid {
     pub composition_initial_kwc_counts: Vec<u64>,
     /// Ban rates, as fractions of registered IDs per year (sensitivity; 0 is the base case).
     pub ban_rates_per_year: Vec<f64>,
-    /// Deactivation cycles (deactivation, then re-activation) per registered ID per year. An
-    /// illustrative sensitivity until M3 provides household downtime profiles.
-    pub deactivation_cycles_per_id_per_year: Vec<f64>,
 }
 
 impl Default for WitnessGrid {
@@ -95,7 +92,6 @@ impl Default for WitnessGrid {
             composition_horizon_years: 10.0,
             composition_initial_kwc_counts: vec![10_000, 100_000, 290_000, 1_000_000],
             ban_rates_per_year: vec![0.0, 0.01, 0.05],
-            deactivation_cycles_per_id_per_year: vec![0.0, 1.0, 4.0],
         }
     }
 }
@@ -234,6 +230,119 @@ impl Default for QuorumTradeoffGrid {
     }
 }
 
+/// Illustrative absence model, shared by the seat-rule counts (sections B and G) and the
+/// uptime analysis (section H), until M3 supplies household downtime profiles.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AbsenceGrid {
+    /// Absences long enough to deactivate an ID, per ID per year (the ID later returns). The
+    /// base case elsewhere is 0.
+    pub absences_per_id_per_year: Vec<f64>,
+    /// Primary duration model, Lomax: scale σ in days, in P(D > x) = (1 + x/σ)^(−α).
+    pub duration_scale_days: f64,
+    /// Primary duration model, Lomax: shape α.
+    pub duration_shape: f64,
+    /// Comparison duration model: exponential with this mean, in days.
+    pub comparison_exponential_mean_days: f64,
+    /// Permanent departures per ID per year (section H3).
+    pub departures_per_id_per_year: Vec<f64>,
+}
+
+impl Default for AbsenceGrid {
+    fn default() -> Self {
+        AbsenceGrid {
+            absences_per_id_per_year: vec![1.0, 4.0],
+            duration_scale_days: 2.0,
+            duration_shape: 1.5,
+            comparison_exponential_mean_days: 7.0,
+            departures_per_id_per_year: vec![0.0, 0.1, 0.25],
+        }
+    }
+}
+
+/// Section H grid: quorum feasibility under honest downtime.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QuorumFeasibilityGrid {
+    /// Probability f that an honest member is online.
+    pub online_fractions: Vec<f64>,
+    /// Attacker's fraction p of seats; its members withhold.
+    pub attacker_fractions: Vec<f64>,
+    /// Shares of failing KWCs for which the minimum uptime is reported.
+    pub failure_targets: Vec<f64>,
+    /// Network size, in KWCs, of the hypergeometric comparison and of the counts.
+    pub comparison_kwcs: u64,
+}
+
+impl Default for QuorumFeasibilityGrid {
+    fn default() -> Self {
+        QuorumFeasibilityGrid {
+            online_fractions: vec![0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99],
+            attacker_fractions: vec![0.0, 0.1, 0.2, 0.25, 0.33],
+            failure_targets: vec![0.01, 0.001],
+            comparison_kwcs: 100_000,
+        }
+    }
+}
+
+/// Section I grid: the KWC size trade-off.
+///
+/// Policy A uses `capacity.miners_per_leader_wc`; policy B uses the miners watched per node
+/// (`witness.watched_registered_per_node` + `witness.watched_unregistered_per_node`); policy C
+/// sizes registered capacity to the WC's members plus `capacity.spare_target_fraction`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KwcSizeGrid {
+    /// WCs per KWC, k (a KWC has 10·k members).
+    pub wcs_per_kwc: Vec<u64>,
+    /// Golomb-ring offsets for each size, in the same order (k − 1 offsets each).
+    pub ring_offsets: Vec<Vec<u64>>,
+    /// Single quorums over the whole KWC.
+    pub quorum_fractions: Vec<Fraction>,
+    /// Attacker fractions p for the security table (I1).
+    pub attacker_fractions: Vec<f64>,
+    /// Attacker fractions p for the liveness table (I2).
+    pub liveness_attacker_fractions: Vec<f64>,
+    /// Network size, in KWCs, for the hypergeometric probabilities.
+    pub comparison_kwcs: u64,
+    /// Policy C: unregistered capacity per WC, u.
+    pub unregistered_per_wc_policy_c: Vec<u64>,
+    /// Bytes per exchange between a miner and one witness (from the papers).
+    pub message_bytes: f64,
+    /// Seconds between exchanges for registered miners (from the papers: 1–5 s).
+    pub registered_cadences_s: Vec<f64>,
+    /// Seconds between exchanges for unregistered miners (from the papers).
+    pub unregistered_cadence_s: f64,
+    /// Miner session changes (starts plus ends) per miner per day, each needing a KWC
+    /// decision; illustrative, for the on-demand connection estimate.
+    pub miner_session_changes_per_day: Vec<f64>,
+}
+
+impl Default for KwcSizeGrid {
+    fn default() -> Self {
+        KwcSizeGrid {
+            wcs_per_kwc: vec![3, 4, 5, 6, 8, 10],
+            ring_offsets: vec![
+                vec![1, 3],
+                vec![1, 4, 6],
+                vec![1, 4, 9, 11],
+                vec![1, 4, 10, 12, 17],
+                vec![1, 4, 9, 15, 22, 32, 34],
+                vec![1, 6, 10, 23, 26, 34, 41, 53, 55],
+            ],
+            quorum_fractions: vec![Fraction::new(2, 3), Fraction::new(51, 100)],
+            attacker_fractions: vec![0.1, 0.2, 0.25, 0.3, 0.33, 0.4, 0.45],
+            liveness_attacker_fractions: vec![0.0, 0.1, 0.2, 0.25, 0.33],
+            comparison_kwcs: 100_000,
+            unregistered_per_wc_policy_c: vec![50, 100, 235],
+            message_bytes: 295.0,
+            registered_cadences_s: vec![1.0, 5.0],
+            unregistered_cadence_s: 30.0,
+            miner_session_changes_per_day: vec![2.0, 8.0],
+        }
+    }
+}
+
 /// All M1 grids.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -252,6 +361,12 @@ pub struct AnalyticConfig {
     pub ties: TiesGrid,
     /// Section G.
     pub quorum_tradeoff: QuorumTradeoffGrid,
+    /// Absence model shared by sections B, G and H.
+    pub absence: AbsenceGrid,
+    /// Section H.
+    pub quorum_feasibility: QuorumFeasibilityGrid,
+    /// Section I.
+    pub kwc_size: KwcSizeGrid,
 }
 
 /// Sample sizes for the seeded Monte Carlo cross-checks.
@@ -282,6 +397,8 @@ pub struct MonteCarloConfig {
     pub tie_rounds: u64,
     /// Miners in the tie simulation (section F).
     pub tie_miners: u64,
+    /// Random KWCs drawn per point in the quorum-feasibility simulation (section H).
+    pub feasibility_samples: u64,
     /// Agreement tolerance, in standard errors.
     pub tolerance_standard_errors: f64,
 }
@@ -301,6 +418,7 @@ impl Default for MonteCarloConfig {
             hopping_replicates: 4_000,
             tie_rounds: 200_000,
             tie_miners: 200,
+            feasibility_samples: 200_000,
             tolerance_standard_errors: 5.0,
         }
     }

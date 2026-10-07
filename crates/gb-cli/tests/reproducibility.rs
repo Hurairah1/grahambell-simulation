@@ -21,6 +21,7 @@ fn test_config() -> Config {
     mc.per_round_trials = 2_000;
     mc.hopping_replicates = 600;
     mc.tie_rounds = 20_000;
+    mc.feasibility_samples = 40_000;
     config
 }
 

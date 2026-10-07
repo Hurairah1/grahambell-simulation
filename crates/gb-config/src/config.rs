@@ -201,6 +201,11 @@ impl Config {
         );
         require(
             problems,
+            self.offline.long_absence_threshold_s.value > 0.0,
+            "offline.long_absence_threshold_s must be positive",
+        );
+        require(
+            problems,
             self.cac.join_every_n_tx_blocks.value > 0,
             "cac.join_every_n_tx_blocks must be positive",
         );
@@ -275,15 +280,6 @@ impl Config {
             true,
             true,
         );
-        require(
-            problems,
-            !a.witness.deactivation_cycles_per_id_per_year.is_empty()
-                && a.witness
-                    .deactivation_cycles_per_id_per_year
-                    .iter()
-                    .all(|c| c.is_finite() && *c >= 0.0),
-            "witness.deactivation_cycles_per_id_per_year must be non-negative",
-        );
         check_fractions(
             problems,
             "cac.attacker_fractions",
@@ -318,6 +314,9 @@ impl Config {
             "hopping.attacker_ratios must be positive",
         );
         self.validate_quorum_grid(problems);
+        self.validate_absence_grid(problems);
+        self.validate_feasibility_grid(problems);
+        self.validate_kwc_size_grid(problems);
         require(
             problems,
             a.ties.competing_miners.iter().all(|n| *n > 1),
@@ -333,6 +332,136 @@ impl Config {
             self.run.monte_carlo.committee_population > 100
                 && self.run.monte_carlo.lottery_population > 100,
             "run.monte_carlo committee and lottery populations must exceed 100, the largest simulated committee",
+        );
+    }
+
+    fn validate_absence_grid(&self, problems: &mut Vec<String>) {
+        let g = &self.analytic.absence;
+        require(
+            problems,
+            !g.absences_per_id_per_year.is_empty()
+                && g.absences_per_id_per_year
+                    .iter()
+                    .all(|c| c.is_finite() && *c >= 0.0),
+            "absence.absences_per_id_per_year must be non-negative",
+        );
+        require(
+            problems,
+            g.duration_scale_days > 0.0
+                && g.duration_shape > 0.0
+                && g.comparison_exponential_mean_days > 0.0,
+            "absence duration scale, shape and comparison mean must be positive",
+        );
+        check_fractions(
+            problems,
+            "absence.departures_per_id_per_year",
+            &g.departures_per_id_per_year,
+            true,
+            true,
+        );
+    }
+
+    fn validate_feasibility_grid(&self, problems: &mut Vec<String>) {
+        let g = &self.analytic.quorum_feasibility;
+        check_fractions(
+            problems,
+            "quorum_feasibility.online_fractions",
+            &g.online_fractions,
+            false,
+            true,
+        );
+        check_fractions(
+            problems,
+            "quorum_feasibility.attacker_fractions",
+            &g.attacker_fractions,
+            true,
+            false,
+        );
+        check_fractions(
+            problems,
+            "quorum_feasibility.failure_targets",
+            &g.failure_targets,
+            false,
+            false,
+        );
+        require(
+            problems,
+            g.comparison_kwcs > 0 && self.run.monte_carlo.feasibility_samples > 0,
+            "quorum_feasibility.comparison_kwcs and run.monte_carlo.feasibility_samples must be positive",
+        );
+    }
+
+    fn validate_kwc_size_grid(&self, problems: &mut Vec<String>) {
+        let g = &self.analytic.kwc_size;
+        require(
+            problems,
+            !g.wcs_per_kwc.is_empty()
+                && g.wcs_per_kwc.len() == g.ring_offsets.len()
+                && g.wcs_per_kwc.iter().all(|k| *k >= 2),
+            "kwc_size.wcs_per_kwc must list sizes of at least 2 WCs, one ring per size",
+        );
+        for (k, offsets) in g.wcs_per_kwc.iter().zip(&g.ring_offsets) {
+            let as_u32: Vec<u32> = offsets
+                .iter()
+                .map(|o| u32::try_from(*o).unwrap_or(0))
+                .collect();
+            let expected = u32::try_from(k.saturating_sub(1)).unwrap_or(0);
+            check_offsets(problems, "kwc_size.ring_offsets", &as_u32, expected);
+        }
+        // The size of the protocol's layout must use the protocol's ring.
+        let protocol_size = 1 + u64::from(self.witness.subordinate_wcs_per_kwc.value);
+        let protocol_ring: Vec<u64> = self
+            .witness
+            .ring_offsets
+            .value
+            .iter()
+            .map(|o| u64::from(*o))
+            .collect();
+        let consistent = g
+            .wcs_per_kwc
+            .iter()
+            .zip(&g.ring_offsets)
+            .filter(|(k, _)| **k == protocol_size)
+            .all(|(_, offsets)| *offsets == protocol_ring);
+        require(
+            problems,
+            consistent,
+            "kwc_size.ring_offsets for the protocol's KWC size must equal witness.ring_offsets",
+        );
+        let quorums_valid = !g.quorum_fractions.is_empty()
+            && g.quorum_fractions
+                .iter()
+                .all(|q| q.is_proper() && q.exceeds_half());
+        require(
+            problems,
+            quorums_valid,
+            "kwc_size.quorum_fractions must lie above 1/2 and at most 1",
+        );
+        check_fractions(
+            problems,
+            "kwc_size.attacker_fractions",
+            &g.attacker_fractions,
+            false,
+            false,
+        );
+        check_fractions(
+            problems,
+            "kwc_size.liveness_attacker_fractions",
+            &g.liveness_attacker_fractions,
+            true,
+            false,
+        );
+        require(
+            problems,
+            g.comparison_kwcs > 0
+                && !g.unregistered_per_wc_policy_c.is_empty()
+                && g.message_bytes > 0.0
+                && !g.registered_cadences_s.is_empty()
+                && g.registered_cadences_s.iter().all(|c| *c > 0.0)
+                && g.unregistered_cadence_s > 0.0
+                && !g.miner_session_changes_per_day.is_empty()
+                && g.miner_session_changes_per_day.iter().all(|s| *s >= 0.0),
+            "kwc_size load inputs must be positive (sessions non-negative)",
         );
     }
 
@@ -563,6 +692,38 @@ mod tests {
                 "[analytic.quorum_tradeoff]\nquorum_fractions = [{ numerator = 51, denominator = 100 }]\n"
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn kwc_size_rings_must_match_their_sizes_and_the_protocol() {
+        let wrong_length = Config::from_toml_str(
+            "[analytic.kwc_size]\nwcs_per_kwc = [3, 4]\nring_offsets = [[1, 3], [1, 4]]\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(wrong_length, ConfigError::Invalid(_)),
+            "{wrong_length}"
+        );
+        let not_protocol = Config::from_toml_str(
+            "[analytic.kwc_size]\nwcs_per_kwc = [4]\nring_offsets = [[1, 3, 7]]\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(not_protocol, ConfigError::Invalid(_)),
+            "{not_protocol}"
+        );
+    }
+
+    #[test]
+    fn absence_and_feasibility_inputs_are_checked() {
+        assert!(Config::from_toml_str("[analytic.absence]\nduration_shape = 0.0\n").is_err());
+        assert!(
+            Config::from_toml_str("[analytic.quorum_feasibility]\nfailure_targets = [1.0]\n")
+                .is_err()
+        );
+        assert!(
+            Config::from_toml_str("[offline]\nlong_absence_threshold_s.value = 0.0\n").is_err()
         );
     }
 

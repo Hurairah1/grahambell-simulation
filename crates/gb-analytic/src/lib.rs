@@ -13,9 +13,13 @@
 //! | E — difficulty hopping | [`hopping`] | §3.8, §8 S6, §10 H5 |
 //! | F — same-step ties between PoW-ID blocks | [`ties`] | §3.5, §3.7 |
 //! | G — quorum trade-off: stall, sign alone, conflicting approvals | [`quorum_tradeoff`] | §2, §3.7, §4.2–§4.6 |
+//! | H — quorum feasibility under honest downtime | [`quorum_feasibility`] | §2, §3.2, §4.5–§4.7 |
+//! | I — KWC size trade-off: security, liveness, load | [`kwc_size`] | §2, §4.1–§4.2, §12 |
 //!
 //! Supporting modules:
 //!
+//! - [`allocation`]: the adopted allocation's composition and episode counts, and the
+//!   illustrative absence model, shared by sections B, G and I;
 //! - [`exact`] and [`dist`]: exact rational arithmetic and distributions;
 //! - [`logspace`]: an independent floating-point implementation used as a cross-check;
 //! - [`mc`]: seeded Monte Carlo helpers;
@@ -23,13 +27,16 @@
 //!
 //! This crate performs no I/O; `gb-cli` writes the tables, charts and summary.
 
+pub mod allocation;
 pub mod cac;
 pub mod dist;
 pub mod error;
 pub mod exact;
 pub mod hopping;
+pub mod kwc_size;
 pub mod logspace;
 pub mod mc;
+pub mod quorum_feasibility;
 pub mod quorum_tradeoff;
 pub mod restart;
 pub mod ties;
@@ -61,6 +68,10 @@ pub struct M1Results {
     pub f: Vec<ties::TieRow>,
     /// Section G tables.
     pub g: quorum_tradeoff::SectionG,
+    /// Section H tables.
+    pub h: quorum_feasibility::SectionH,
+    /// Section I tables.
+    pub i: kwc_size::SectionI,
     /// All cross-checks, in section order.
     pub checks: Vec<Check>,
 }
@@ -82,13 +93,17 @@ pub fn run(config: &Config) -> Result<M1Results> {
     let e = hopping::section_e(config)?;
     let f = ties::section_f(config)?;
     let g = quorum_tradeoff::section_g(config)?;
+    let h = quorum_feasibility::section_h(config)?;
+    let i = kwc_size::section_i(config)?;
     let mut checks = time_threshold::checks(config)?;
     checks.extend(witness::checks(config, &b)?);
     checks.extend(cac::checks(config)?);
     checks.extend(restart::checks(config)?);
     checks.extend(hopping::checks(config)?);
     checks.extend(ties::checks(config)?);
-    checks.extend(quorum_tradeoff::checks(config, &g, &c)?);
+    checks.extend(quorum_tradeoff::checks(config, &g, &b, &c)?);
+    checks.extend(quorum_feasibility::checks(config, &h)?);
+    checks.extend(kwc_size::checks(config, &i, &g, &h)?);
     Ok(M1Results {
         a,
         b,
@@ -98,6 +113,8 @@ pub fn run(config: &Config) -> Result<M1Results> {
         e,
         f,
         g,
+        h,
+        i,
         checks,
     })
 }

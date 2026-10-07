@@ -21,6 +21,14 @@
 //! when `a ≥ 2k − n`. The seat condition is necessary; the attacker also needs a proposer
 //! turn, or another way to put two proposals in front of members.
 //!
+//! Since SPEC v0.4 (§4.6), two conflicting decisions that are both approved are **both
+//! rejected**, and every member who signed both has produced equivocation evidence and may be
+//! banned. A conflict therefore cancels a decision rather than enacting two. The proposer
+//! rights (§4.4) decide who can put both proposals forward: the master proposer for MOBr,
+//! registered offline requests and bans; the subordinate-only proposer for MOBu and
+//! unregistered offline requests (and bans of leader-chain members who refuse to witness
+//! newcomers); the miner for its own offline requests.
+//!
 //! The **registered layout** approves with `k₁ = ⌈10q⌉` of the leader WC's 10 seats **and**
 //! `k₂ = ⌈30q⌉` of the 30 subordinate seats. Each condition then applies group by group:
 //! stall when `L ≥ 11 − k₁` or `S ≥ 31 − k₂`; sign when `L ≥ k₁` and `S ≥ k₂`; conflict when
@@ -34,20 +42,24 @@
 //! # Probabilities
 //!
 //! Seats are a uniformly random draw (SPEC §4.2): hypergeometric at a network of `W` KWCs
-//! (`10·W` IDs, `p·10·W` of them the attacker's), binomial for the ten-year counts, which use
-//! the composition count of section B (SPEC §10 H6 refresh model, no bans, no deactivation).
-//! The committee part (G3) uses the seat lottery's primary model of section C.
+//! (`10·W` IDs, `p·10·W` of them the attacker's), binomial for the ten-year counts. Those
+//! counts use [`crate::allocation`], as section B does: **distinct episodes** (the primary
+//! measure since SPEC v0.4, §10 H6), with the composition count as an upper bound. G1 has no
+//! bans or absences; G4 repeats the counts under illustrative absences for the v0.3 seat rule
+//! and the v0.4 rule at every long-absence threshold L. The committee part (G3) uses the seat
+//! lottery's primary model of section C.
 
+use crate::allocation::{
+    BinomialSeats, EntryRates, HorizonInputs, RelinkProfile, absence_models, composition_count,
+    days_in_blocks, entry_rates, episode_count, relink_profile, seat_rules,
+};
 use crate::cac::{CommitteeModel, seat_distribution};
 use crate::dist::{ExactDistribution, JointDistribution, SeatModel};
 use crate::error::{AnalyticError, Result, ensure};
 use crate::exact::{Q, decimal, integer, log10, scientific, to_f64};
 use crate::logspace;
 use crate::validation::Check;
-use crate::witness::{
-    CompositionInputs, KwcSpec, KwcState, MinerKind, attacker_ids, composition_count,
-    state_probability,
-};
+use crate::witness::{KwcSpec, KwcState, MinerKind, SectionB, attacker_ids, state_probability};
 use gb_config::Config;
 use gb_config::protocol::Fraction;
 use serde::Serialize;
@@ -355,7 +367,7 @@ pub struct QuorumRow {
     /// Expected KWCs able to approve conflicting decisions at one moment.
     pub expected_kwcs_conflict: String,
     /// KWC compositions over the section B horizon (adopted allocation, no bans or
-    /// deactivation), starting from `kwcs`.
+    /// absences), starting from `kwcs`.
     pub compositions_over_horizon: f64,
     /// P(stall), binomial (used for the counts over the horizon).
     pub p_stall_binomial: String,
@@ -363,11 +375,59 @@ pub struct QuorumRow {
     pub p_sign_binomial: String,
     /// P(conflict), binomial.
     pub p_conflict_binomial: String,
-    /// Expected compositions able to stall over the horizon.
+    /// Expected distinct episodes able to stall over the horizon (primary measure).
+    pub expected_episodes_stall: f64,
+    /// Expected distinct episodes able to sign without honest members.
+    pub expected_episodes_sign: f64,
+    /// Expected distinct episodes able to approve conflicting decisions.
+    pub expected_episodes_conflict: f64,
+    /// Expected compositions able to stall over the horizon (upper bound on episodes).
     pub expected_compositions_stall: f64,
-    /// Expected compositions able to sign without honest members over the horizon.
+    /// Expected compositions able to sign without honest members (upper bound).
     pub expected_compositions_sign: f64,
-    /// Expected compositions able to approve conflicting decisions over the horizon.
+    /// Expected compositions able to approve conflicting decisions (upper bound).
+    pub expected_compositions_conflict: f64,
+}
+
+/// G4: ten-year counts under illustrative absences, for the v0.3 seat rule and the v0.4 rule
+/// at each long-absence threshold L.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SeatRuleQuorumRow {
+    /// [`POOL_LAYOUT`] or [`REGISTERED_LAYOUT`].
+    pub layout: &'static str,
+    /// Quorum option.
+    pub quorum: String,
+    /// True for the SPEC §2 default quorum of this layout.
+    pub spec_default: bool,
+    /// Signatures needed.
+    pub approvals: String,
+    /// Attacker fraction p.
+    pub attacker_fraction: f64,
+    /// KWCs at the start.
+    pub kwcs: u64,
+    /// Absence-duration model.
+    pub duration_model: &'static str,
+    /// Absences per registered ID per year.
+    pub absences_per_id_per_year: f64,
+    /// Seat rule.
+    pub seat_rule: String,
+    /// Long-absence threshold L in days (v0.4 rows).
+    pub long_absence_days: Option<f64>,
+    /// L in PoW-ID blocks at the target interval (v0.4 rows).
+    pub long_absence_blocks: Option<f64>,
+    /// KWC compositions over the horizon.
+    pub compositions: f64,
+    /// Expected distinct episodes able to stall (primary measure).
+    pub expected_episodes_stall: f64,
+    /// Expected distinct episodes able to sign without honest members.
+    pub expected_episodes_sign: f64,
+    /// Expected distinct episodes able to approve conflicting decisions.
+    pub expected_episodes_conflict: f64,
+    /// Expected compositions able to stall (upper bound on episodes).
+    pub expected_compositions_stall: f64,
+    /// Expected compositions able to sign without honest members (upper bound).
+    pub expected_compositions_sign: f64,
+    /// Expected compositions able to approve conflicting decisions (upper bound).
     pub expected_compositions_conflict: f64,
 }
 
@@ -450,6 +510,8 @@ pub struct SectionG {
     pub split: Vec<SplitRuleRow>,
     /// G3.
     pub cac: Vec<CacQuorumRow>,
+    /// G4.
+    pub seat_rule: Vec<SeatRuleQuorumRow>,
 }
 
 /// One quorum option of G1.
@@ -526,12 +588,31 @@ fn options(config: &Config) -> Result<Vec<QuorumOption>> {
     Ok(options)
 }
 
+/// Entry rates of the three harms for one quorum option.
+fn harm_entry_rates(
+    layout: &QuorumLayout,
+    seats: &BinomialSeats,
+    profile: &RelinkProfile,
+) -> Result<Vec<EntryRates>> {
+    HARMS
+        .iter()
+        .map(|harm| {
+            let inside = |x: u64, y: u64| layout.allows(*harm, x, y);
+            entry_rates(seats, profile, &inside)
+        })
+        .collect()
+}
+
 /// Builds every section G table from the configuration.
 pub fn section_g(config: &Config) -> Result<SectionG> {
     let grid = &config.analytic.quorum_tradeoff;
     let spec = KwcSpec::forty_node(config);
     let (n1, n2) = (spec.leader_seats(), spec.subordinate_seats());
     let options = options(config)?;
+    let rates = spec.composition_rates();
+    let profile = relink_profile(&spec.ring_offsets);
+    let models = absence_models(config);
+    let rules = seat_rules(config);
     let pool_shape = QuorumLayout::Pool {
         seats: n1 + n2,
         quorum: n1 + n2,
@@ -549,6 +630,11 @@ pub fn section_g(config: &Config) -> Result<SectionG> {
         let binomial = SeatModel::Binomial(p.clone());
         let pool_binomial = Seats::new(&pool_shape, &binomial)?;
         let two_binomial = Seats::new(&two_group_shape, &binomial)?;
+        let seats = BinomialSeats::new(n1, n2, spec.wc_size, &p)?;
+        let entries: Vec<Vec<EntryRates>> = options
+            .iter()
+            .map(|o| harm_entry_rates(&o.layout, &seats, &profile))
+            .collect::<Result<_>>()?;
         for &kwcs in &grid.kwc_counts {
             let population = spec.wc_size * kwcs;
             let model = SeatModel::Hypergeometric {
@@ -557,17 +643,9 @@ pub fn section_g(config: &Config) -> Result<SectionG> {
             };
             let pool = Seats::new(&pool_shape, &model)?;
             let two = Seats::new(&two_group_shape, &model)?;
-            let compositions = composition_count(
-                &spec,
-                &CompositionInputs {
-                    initial_kwcs: kwcs,
-                    horizon_years: config.analytic.witness.composition_horizon_years,
-                    issuance_per_year: config.issuance_per_year(),
-                    ban_rate: 0.0,
-                    deactivation_cycles: 0.0,
-                },
-            );
-            for option in &options {
+            let inputs = HorizonInputs::from_config(config, kwcs, 0.0, 0.0);
+            let compositions = composition_count(&inputs, &rates);
+            for (option, harm_entries) in options.iter().zip(&entries) {
                 let (exact, approximate) = match option.layout {
                     QuorumLayout::Pool { .. } => (&pool, &pool_binomial),
                     QuorumLayout::TwoGroup { .. } => (&two, &two_binomial),
@@ -580,8 +658,12 @@ pub fn section_g(config: &Config) -> Result<SectionG> {
                     .iter()
                     .map(|h| approximate.probability(&option.layout, *h))
                     .collect();
+                let binomial_f64: Vec<f64> = binomials.iter().map(to_f64).collect();
                 let expected = |q: &Q| scientific(&(q * integer(kwcs)), 6);
-                let over_horizon = |q: &Q| compositions * to_f64(q);
+                let episodes: Vec<f64> = harm_entries
+                    .iter()
+                    .map(|e| episode_count(&inputs, &rates, e))
+                    .collect();
                 tables.quorum.push(QuorumRow {
                     layout: option.layout_label,
                     quorum: option.label.clone(),
@@ -606,10 +688,48 @@ pub fn section_g(config: &Config) -> Result<SectionG> {
                     p_stall_binomial: scientific(&binomials[0], 6),
                     p_sign_binomial: scientific(&binomials[1], 6),
                     p_conflict_binomial: scientific(&binomials[2], 6),
-                    expected_compositions_stall: over_horizon(&binomials[0]),
-                    expected_compositions_sign: over_horizon(&binomials[1]),
-                    expected_compositions_conflict: over_horizon(&binomials[2]),
+                    expected_episodes_stall: episodes[0],
+                    expected_episodes_sign: episodes[1],
+                    expected_episodes_conflict: episodes[2],
+                    expected_compositions_stall: compositions * binomial_f64[0],
+                    expected_compositions_sign: compositions * binomial_f64[1],
+                    expected_compositions_conflict: compositions * binomial_f64[2],
                 });
+                for duration in &models {
+                    for &c in &config.analytic.absence.absences_per_id_per_year {
+                        for rule in &rules {
+                            let vacating = c * rule.vacating_share(duration);
+                            let inputs = HorizonInputs::from_config(config, kwcs, 0.0, vacating);
+                            let compositions = composition_count(&inputs, &rates);
+                            let episodes: Vec<f64> = harm_entries
+                                .iter()
+                                .map(|e| episode_count(&inputs, &rates, e))
+                                .collect();
+                            tables.seat_rule.push(SeatRuleQuorumRow {
+                                layout: option.layout_label,
+                                quorum: option.label.clone(),
+                                spec_default: option.spec_default,
+                                approvals: option.layout.approvals_label(),
+                                attacker_fraction: *p_f,
+                                kwcs,
+                                duration_model: duration.label(),
+                                absences_per_id_per_year: c,
+                                seat_rule: rule.label(),
+                                long_absence_days: rule.long_absence_days(),
+                                long_absence_blocks: rule
+                                    .long_absence_days()
+                                    .map(|d| days_in_blocks(config, d)),
+                                compositions,
+                                expected_episodes_stall: episodes[0],
+                                expected_episodes_sign: episodes[1],
+                                expected_episodes_conflict: episodes[2],
+                                expected_compositions_stall: compositions * binomial_f64[0],
+                                expected_compositions_sign: compositions * binomial_f64[1],
+                                expected_compositions_conflict: compositions * binomial_f64[2],
+                            });
+                        }
+                    }
+                }
             }
             for q in &grid.powit_quorum_fractions {
                 let powit_pool = QuorumLayout::pool(n1 + n2, q)?;
@@ -922,8 +1042,124 @@ fn monotonicity_check(g: &SectionG) -> Check {
     )
 }
 
+fn episode_bounds_check(g: &SectionG) -> Check {
+    // Episodes count the initial KWCs in the state plus entries, and an entry needs a changed
+    // composition, so W0·q <= episodes <= compositions·q for every harm.
+    let mut failures = 0;
+    let mut rows = 0;
+    let mut test = |kwcs: u64, compositions: f64, upper: [f64; 3], episodes: [f64; 3]| {
+        for (u, e) in upper.iter().zip(episodes) {
+            rows += 1;
+            let q = if compositions > 0.0 {
+                u / compositions
+            } else {
+                0.0
+            };
+            let lower = kwcs as f64 * q;
+            failures += u64::from(e < lower * (1.0 - 1e-12) || e > u * (1.0 + 1e-12));
+        }
+    };
+    for r in &g.quorum {
+        test(
+            r.kwcs,
+            r.compositions_over_horizon,
+            [
+                r.expected_compositions_stall,
+                r.expected_compositions_sign,
+                r.expected_compositions_conflict,
+            ],
+            [
+                r.expected_episodes_stall,
+                r.expected_episodes_sign,
+                r.expected_episodes_conflict,
+            ],
+        );
+    }
+    for r in &g.seat_rule {
+        test(
+            r.kwcs,
+            r.compositions,
+            [
+                r.expected_compositions_stall,
+                r.expected_compositions_sign,
+                r.expected_compositions_conflict,
+            ],
+            [
+                r.expected_episodes_stall,
+                r.expected_episodes_sign,
+                r.expected_episodes_conflict,
+            ],
+        );
+    }
+    Check::all_rows(
+        "G",
+        "G-episodes-bounds",
+        "every G1/G4 row and harm: initial KWCs × q <= distinct episodes <= compositions × q",
+        failures,
+        rows,
+    )
+}
+
+fn kind_of(layout: &str) -> &'static str {
+    if layout == POOL_LAYOUT {
+        MinerKind::Unregistered.label()
+    } else {
+        MinerKind::Registered.label()
+    }
+}
+
+fn episodes_reproduce_section_b_check(g: &SectionG, b: &SectionB) -> Check {
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-12 * x.abs().max(y.abs());
+    let mut failures = 0;
+    let mut rows = 0;
+    for r in g.quorum.iter().filter(|r| r.spec_default) {
+        let Some(row) = b.compositions.iter().find(|o| {
+            o.miner_kind == kind_of(r.layout)
+                && o.attacker_fraction == r.attacker_fraction
+                && o.initial_kwcs == r.kwcs
+                && o.ban_rate_per_year == 0.0
+        }) else {
+            continue;
+        };
+        rows += 1;
+        failures += u64::from(
+            !close(r.expected_episodes_sign, row.expected_sign_episodes)
+                || !close(r.compositions_over_horizon, row.compositions),
+        );
+    }
+    for r in g.seat_rule.iter().filter(|r| r.spec_default) {
+        let Some(row) = b.seat_rule.iter().find(|o| {
+            o.miner_kind == kind_of(r.layout)
+                && o.attacker_fraction == r.attacker_fraction
+                && o.initial_kwcs == r.kwcs
+                && o.duration_model == r.duration_model
+                && o.absences_per_id_per_year == r.absences_per_id_per_year
+                && o.seat_rule == r.seat_rule
+        }) else {
+            continue;
+        };
+        rows += 1;
+        failures += u64::from(
+            !close(r.expected_episodes_sign, row.expected_sign_episodes)
+                || !close(r.compositions, row.compositions),
+        );
+    }
+    Check::all_rows(
+        "G",
+        "G-episodes-reproduce-B",
+        "SPEC default quorums: G1 and G4 sign episodes and compositions equal B4 and B5 within 1e-12 relative, where the grids overlap",
+        failures,
+        rows,
+    )
+}
+
 /// Section G cross-checks.
-pub fn checks(config: &Config, g: &SectionG, c: &crate::cac::SectionC) -> Result<Vec<Check>> {
+pub fn checks(
+    config: &Config,
+    g: &SectionG,
+    b: &SectionB,
+    c: &crate::cac::SectionC,
+) -> Result<Vec<Check>> {
     Ok(vec![
         exhaustive_pool_check(),
         exhaustive_two_group_check(),
@@ -931,6 +1167,8 @@ pub fn checks(config: &Config, g: &SectionG, c: &crate::cac::SectionC) -> Result
         reproduces_section_c_check(g, c),
         log_space_check(config)?,
         monotonicity_check(g),
+        episode_bounds_check(g),
+        episodes_reproduce_section_b_check(g, b),
     ])
 }
 
@@ -1042,6 +1280,9 @@ mod tests {
             per_cell * (2 * grid.quorum_fractions.len() + 1)
         );
         assert_eq!(g.split.len(), per_cell * grid.powit_quorum_fractions.len());
+        // G4: every G1 row × duration models × absence rates × (v0.3 + five thresholds).
+        let absences = config.analytic.absence.absences_per_id_per_year.len();
+        assert_eq!(g.seat_rule.len(), g.quorum.len() * 2 * absences * 6);
         assert_eq!(
             g.cac.len(),
             grid.attacker_fractions.len() * grid.cac_quorum_fractions.len()
@@ -1085,11 +1326,39 @@ mod tests {
     }
 
     #[test]
-    fn all_section_g_checks_pass() {
+    fn default_episodes_match_the_plan_preview() {
+        // Plan preview (independent Python computation): over 10 years from 100k KWCs at
+        // p = 25%, 0.476 episodes (0.926 compositions) for 27 of 40 and 0.0263 (0.0489) for
+        // 7 + 21.
         let config = Config::default();
         let g = section_g(&config).unwrap();
+        let row = |layout: &str| {
+            g.quorum
+                .iter()
+                .find(|r| {
+                    r.layout == layout
+                        && r.spec_default
+                        && r.attacker_fraction == 0.25
+                        && r.kwcs == 100_000
+                })
+                .unwrap()
+        };
+        let pool = row(POOL_LAYOUT);
+        assert!((pool.expected_episodes_sign - 0.476).abs() < 0.0005);
+        assert!((pool.expected_compositions_sign - 0.926).abs() < 0.0005);
+        let registered = row(REGISTERED_LAYOUT);
+        assert!((registered.expected_episodes_sign - 0.0263).abs() < 0.00005);
+        assert!((registered.expected_compositions_sign - 0.0489).abs() < 0.00005);
+    }
+
+    #[test]
+    fn all_section_g_checks_pass() {
+        let mut config = Config::default();
+        config.run.monte_carlo.partition_replicates = 600;
+        let b = crate::witness::section_b(&config).unwrap();
+        let g = section_g(&config).unwrap();
         let c = crate::cac::section_c(&config).unwrap();
-        for check in checks(&config, &g, &c).unwrap() {
+        for check in checks(&config, &g, &b, &c).unwrap() {
             assert!(check.passed, "{check:?}");
         }
     }

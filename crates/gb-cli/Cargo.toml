@@ -4,6 +4,7 @@ description = "Command-line front end for GrahamBell Stage 1 analyses (binary `g
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [[bin]]

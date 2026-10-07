@@ -323,6 +323,12 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "Wait before a returning ID is re-activated.",
     ),
     doc(
+        "offline.long_absence_threshold_s",
+        "§2, §4.2, §4.7",
+        "s",
+        "Long-absence threshold L: a seat is vacated only after a longer continuous absence, or a ban.",
+    ),
+    doc(
         "penalties.suspension_ladder_s",
         "§2, §4.8",
         "s",
@@ -450,6 +456,10 @@ pub const SPEC_SECTION_2_ROWS: &[(&str, &[&str])] = &[
     (
         "Re-activation wait after return",
         &["offline.reactivation_wait_s"],
+    ),
+    (
+        "Long-absence threshold L (§4.7)",
+        &["offline.long_absence_threshold_s"],
     ),
     (
         "Penalty ladder (lesser offences)",
