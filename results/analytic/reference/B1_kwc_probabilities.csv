@@ -1,0 +1,385 @@
+layout,miner_kind,state,attacker_fraction,model,kwcs,attacker_ids,probability,log10_probability,compositions_for_one_expected
+40-node,registered,(i) block,0.05,binomial,,,1.02966e-3,-2.9873068902425466,9.712e2
+40-node,registered,(i) block,0.05,hypergeometric,10000,5000,1.02867e-3,-2.9877254246791196,9.721e2
+40-node,registered,(i) block,0.05,hypergeometric,100000,50000,1.02956e-3,-2.9873487336409816,9.713e2
+40-node,registered,(i) block,0.05,hypergeometric,1000000,500000,1.02965e-3,-2.9873110744819797,9.712e2
+40-node,registered,(ii) sign without honest members,0.05,binomial,,,3.60235e-28,-27.44341357046288,2.776e27
+40-node,registered,(ii) sign without honest members,0.05,hypergeometric,10000,5000,3.36264e-28,-27.473319724373386,2.974e27
+40-node,registered,(ii) sign without honest members,0.05,hypergeometric,100000,50000,3.57768e-28,-27.446398790332317,2.795e27
+40-node,registered,(ii) sign without honest members,0.05,hypergeometric,1000000,500000,3.59988e-28,-27.443712038642513,2.778e27
+40-node,registered,(iii) all seats,0.05,binomial,,,9.09495e-53,-52.04119982655925,1.100e52
+40-node,registered,(iii) all seats,0.05,hypergeometric,10000,5000,7.83897e-53,-52.10574093879808,1.276e52
+40-node,registered,(iii) all seats,0.05,hypergeometric,100000,50000,8.96112e-53,-52.047637851107424,1.116e52
+40-node,registered,(iii) all seats,0.05,hypergeometric,1000000,500000,9.08148e-53,-52.04184346877835,1.101e52
+40-node,unregistered,(i) block,0.05,binomial,,,4.10335e-9,-8.386861328617389,2.437e8
+40-node,unregistered,(i) block,0.05,hypergeometric,10000,5000,4.04595e-9,-8.392979649394714,2.472e8
+40-node,unregistered,(i) block,0.05,hypergeometric,100000,50000,4.09758e-9,-8.387472546264384,2.440e8
+40-node,unregistered,(i) block,0.05,hypergeometric,1000000,500000,4.10277e-9,-8.38692244424628,2.437e8
+40-node,unregistered,(ii) sign without honest members,0.05,binomial,,,4.71730e-26,-25.326306204082588,2.120e25
+40-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,10000,5000,4.42717e-26,-25.353873438220745,2.259e25
+40-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,100000,50000,4.68751e-26,-25.329058104197987,2.133e25
+40-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,1000000,500000,4.71432e-26,-25.326581345988647,2.121e25
+40-node,unregistered,(iii) all seats,0.05,binomial,,,9.09495e-53,-52.04119982655925,1.100e52
+40-node,unregistered,(iii) all seats,0.05,hypergeometric,10000,5000,7.83897e-53,-52.10574093879808,1.276e52
+40-node,unregistered,(iii) all seats,0.05,hypergeometric,100000,50000,8.96112e-53,-52.047637851107424,1.116e52
+40-node,unregistered,(iii) all seats,0.05,hypergeometric,1000000,500000,9.08148e-53,-52.04184346877835,1.101e52
+40-node,registered,(i) block,0.1,binomial,,,1.32437e-2,-1.8779893554740177,7.551e1
+40-node,registered,(i) block,0.1,hypergeometric,10000,10000,1.32380e-2,-1.8781785924950718,7.554e1
+40-node,registered,(i) block,0.1,hypergeometric,100000,100000,1.32432e-2,-1.878008277973077,7.551e1
+40-node,registered,(i) block,0.1,hypergeometric,1000000,1000000,1.32437e-2,-1.8779912477118934,7.551e1
+40-node,registered,(ii) sign without honest members,0.1,binomial,,,5.29499e-20,-19.276134712457782,1.889e19
+40-node,registered,(ii) sign without honest members,0.1,hypergeometric,10000,10000,5.13334e-20,-19.289600286357917,1.948e19
+40-node,registered,(ii) sign without honest members,0.1,hypergeometric,100000,100000,5.27862e-20,-19.277479951552,1.894e19
+40-node,registered,(ii) sign without honest members,0.1,hypergeometric,1000000,1000000,5.29335e-20,-19.276269223202632,1.889e19
+40-node,registered,(iii) all seats,0.1,binomial,,,1.00000e-40,-40.0,1.000e40
+40-node,registered,(iii) all seats,0.1,hypergeometric,10000,10000,9.32112e-41,-40.030531716848536,1.073e40
+40-node,registered,(iii) all seats,0.1,hypergeometric,100000,100000,9.93004e-41,-40.0030491889112,1.007e40
+40-node,registered,(iii) all seats,0.1,hypergeometric,1000000,1000000,9.99298e-41,-40.000304879141986,1.001e40
+40-node,unregistered,(i) block,0.1,binomial,,,1.84747e-5,-4.733421719456004,5.413e4
+40-node,unregistered,(i) block,0.1,hypergeometric,10000,10000,1.83794e-5,-4.735668487630907,5.441e4
+40-node,unregistered,(i) block,0.1,hypergeometric,100000,100000,1.84652e-5,-4.733646261345726,5.416e4
+40-node,unregistered,(i) block,0.1,hypergeometric,1000000,1000000,1.84738e-5,-4.733444172296711,5.413e4
+40-node,unregistered,(ii) sign without honest members,0.1,binomial,,,3.22403e-18,-17.491600357120163,3.102e17
+40-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,10000,10000,3.13396e-18,-17.503906059785734,3.191e17
+40-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,100000,100000,3.21492e-18,-17.49282975192045,3.110e17
+40-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,1000000,1000000,3.22312e-18,-17.491723284861372,3.103e17
+40-node,unregistered,(iii) all seats,0.1,binomial,,,1.00000e-40,-40.0,1.000e40
+40-node,unregistered,(iii) all seats,0.1,hypergeometric,10000,10000,9.32112e-41,-40.030531716848536,1.073e40
+40-node,unregistered,(iii) all seats,0.1,hypergeometric,100000,100000,9.93004e-41,-40.0030491889112,1.007e40
+40-node,unregistered,(iii) all seats,0.1,hypergeometric,1000000,1000000,9.99298e-41,-40.000304879141986,1.001e40
+40-node,registered,(i) block,0.15,binomial,,,5.91448e-2,-1.2280831094385256,1.691e1
+40-node,registered,(i) block,0.15,hypergeometric,10000,15000,5.91268e-2,-1.2282154019322746,1.691e1
+40-node,registered,(i) block,0.15,hypergeometric,100000,150000,5.91430e-2,-1.228096337179469,1.691e1
+40-node,registered,(i) block,0.15,hypergeometric,1000000,1500000,5.91447e-2,-1.2280844321975337,1.691e1
+40-node,registered,(ii) sign without honest members,0.15,binomial,,,2.39541e-15,-14.62061974794791,4.175e14
+40-node,registered,(ii) sign without honest members,0.15,hypergeometric,10000,15000,2.35165e-15,-14.628628158303489,4.252e14
+40-node,registered,(ii) sign without honest members,0.15,hypergeometric,100000,150000,2.39100e-15,-14.621420024310503,4.182e14
+40-node,registered,(ii) sign without honest members,0.15,hypergeometric,1000000,1500000,2.39497e-15,-14.620699769942828,4.175e14
+40-node,registered,(iii) all seats,0.15,binomial,,,1.10573e-33,-32.956349637772746,9.044e32
+40-node,registered,(iii) all seats,0.15,hypergeometric,10000,15000,1.05788e-33,-32.97556485703227,9.453e32
+40-node,registered,(iii) all seats,0.15,hypergeometric,100000,150000,1.10086e-33,-32.95826941317988,9.084e32
+40-node,registered,(iii) all seats,0.15,hypergeometric,1000000,1500000,1.10524e-33,-32.95654159787149,9.048e32
+40-node,unregistered,(i) block,0.15,binomial,,,1.40348e-3,-2.85279410387038,7.125e2
+40-node,unregistered,(i) block,0.15,hypergeometric,10000,15000,1.40018e-3,-2.853817169690277,7.142e2
+40-node,unregistered,(i) block,0.15,hypergeometric,100000,150000,1.40315e-3,-2.8528963627692185,7.127e2
+40-node,unregistered,(i) block,0.15,hypergeometric,1000000,1500000,1.40345e-3,-2.852804329283696,7.125e2
+40-node,unregistered,(ii) sign without honest members,0.15,binomial,,,8.99603e-14,-13.045949004298475,1.112e13
+40-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,10000,15000,8.84726e-14,-13.053191310859038,1.130e13
+40-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,100000,150000,8.98105e-14,-13.046672733760424,1.113e13
+40-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,1000000,1500000,8.99453e-14,-13.046021372237366,1.112e13
+40-node,unregistered,(iii) all seats,0.15,binomial,,,1.10573e-33,-32.956349637772746,9.044e32
+40-node,unregistered,(iii) all seats,0.15,hypergeometric,10000,15000,1.05788e-33,-32.97556485703227,9.453e32
+40-node,unregistered,(iii) all seats,0.15,hypergeometric,100000,150000,1.10086e-33,-32.95826941317988,9.084e32
+40-node,unregistered,(iii) all seats,0.15,hypergeometric,1000000,1500000,1.10524e-33,-32.95654159787149,9.048e32
+40-node,registered,(i) block,0.2,binomial,,,1.74577e-1,-0.7580125032965732,5.728e0
+40-node,registered,(i) block,0.2,hypergeometric,10000,20000,1.74547e-1,-0.7580868338053115,5.729e0
+40-node,registered,(i) block,0.2,hypergeometric,100000,200000,1.74574e-1,-0.758019934675449,5.728e0
+40-node,registered,(i) block,0.2,hypergeometric,1000000,2000000,1.74577e-1,-0.7580132464177431,5.728e0
+40-node,registered,(ii) sign without honest members,0.2,binomial,,,3.87021e-12,-11.412264939963706,2.584e11
+40-node,registered,(ii) sign without honest members,0.2,hypergeometric,10000,20000,3.82331e-12,-11.41756034801767,2.616e11
+40-node,registered,(ii) sign without honest members,0.2,hypergeometric,100000,200000,3.86550e-12,-11.412794179514446,2.587e11
+40-node,registered,(ii) sign without honest members,0.2,hypergeometric,1000000,2000000,3.86974e-12,-11.412317860908463,2.584e11
+40-node,registered,(iii) all seats,0.2,binomial,,,1.09951e-28,-27.958800173440753,9.095e27
+40-node,registered,(iii) all seats,0.2,hypergeometric,10000,20000,1.06571e-28,-27.972360876700854,9.383e27
+40-node,registered,(iii) all seats,0.2,hypergeometric,100000,200000,1.09609e-28,-27.960155279280116,9.123e27
+40-node,registered,(iii) all seats,0.2,hypergeometric,1000000,2000000,1.09917e-28,-27.958935674389565,9.098e27
+40-node,unregistered,(i) block,0.2,binomial,,,1.94074e-2,-1.712033338244897,5.153e1
+40-node,unregistered,(i) block,0.2,hypergeometric,10000,20000,1.93865e-2,-1.7125015669579184,5.158e1
+40-node,unregistered,(i) block,0.2,hypergeometric,100000,200000,1.94053e-2,-1.7120801425169567,5.153e1
+40-node,unregistered,(i) block,0.2,hypergeometric,1000000,2000000,1.94072e-2,-1.7120380184861972,5.153e1
+40-node,unregistered,(ii) sign without honest members,0.2,binomial,,,1.00268e-10,-9.998838650345604,9.973e9
+40-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,10000,20000,9.91822e-11,-10.003566143385061,1.008e10
+40-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,100000,200000,1.00159e-10,-9.999311134117928,9.984e9
+40-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,1000000,2000000,1.00257e-10,-9.998885896069432,9.974e9
+40-node,unregistered,(iii) all seats,0.2,binomial,,,1.09951e-28,-27.958800173440753,9.095e27
+40-node,unregistered,(iii) all seats,0.2,hypergeometric,10000,20000,1.06571e-28,-27.972360876700854,9.383e27
+40-node,unregistered,(iii) all seats,0.2,hypergeometric,100000,200000,1.09609e-28,-27.960155279280116,9.123e27
+40-node,unregistered,(iii) all seats,0.2,hypergeometric,1000000,2000000,1.09917e-28,-27.958935674389565,9.098e27
+40-node,registered,(i) block,0.25,binomial,,,3.76657e-1,-0.42405418528549177,2.655e0
+40-node,registered,(i) block,0.25,hypergeometric,10000,25000,3.76641e-1,-0.4240724018997035,2.655e0
+40-node,registered,(i) block,0.25,hypergeometric,100000,250000,3.76655e-1,-0.4240560063674579,2.655e0
+40-node,registered,(i) block,0.25,hypergeometric,1000000,2500000,3.76657e-1,-0.42405436738789604,2.655e0
+40-node,registered,(ii) sign without honest members,0.25,binomial,,,9.88022e-10,-9.00523327949189,1.012e9
+40-node,registered,(ii) sign without honest members,0.25,hypergeometric,10000,25000,9.79682e-10,-9.008914809164366,1.021e9
+40-node,registered,(ii) sign without honest members,0.25,hypergeometric,100000,250000,9.87185e-10,-9.005601252890116,1.013e9
+40-node,registered,(ii) sign without honest members,0.25,hypergeometric,1000000,2500000,9.87939e-10,-9.005270075037128,1.012e9
+40-node,registered,(iii) all seats,0.25,binomial,,,8.27181e-25,-24.082399653118497,1.209e24
+40-node,registered,(iii) all seats,0.25,hypergeometric,10000,25000,8.08037e-25,-24.092568839855574,1.238e24
+40-node,registered,(iii) all seats,0.25,hypergeometric,100000,250000,8.25247e-25,-24.083415969114764,1.212e24
+40-node,registered,(iii) all seats,0.25,hypergeometric,1000000,2500000,8.26987e-25,-24.0825012786963,1.209e24
+40-node,unregistered,(i) block,0.25,binomial,,,1.03232e-1,-0.986186819502354,9.687e0
+40-node,unregistered,(i) block,0.25,hypergeometric,10000,25000,1.03187e-1,-0.9863736953192301,9.691e0
+40-node,unregistered,(i) block,0.25,hypergeometric,100000,250000,1.03227e-1,-0.9862055005045249,9.687e0
+40-node,unregistered,(i) block,0.25,hypergeometric,1000000,2500000,1.03231e-1,-0.9861886875368029,9.687e0
+40-node,unregistered,(ii) sign without honest members,0.25,binomial,,,1.87104e-8,-7.727917811981449,5.345e7
+40-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,10000,25000,1.85716e-8,-7.731151824696223,5.385e7
+40-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,100000,250000,1.86964e-8,-7.728241056557216,5.349e7
+40-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,1000000,2500000,1.87090e-8,-7.727950134873009,5.345e7
+40-node,unregistered,(iii) all seats,0.25,binomial,,,8.27181e-25,-24.082399653118497,1.209e24
+40-node,unregistered,(iii) all seats,0.25,hypergeometric,10000,25000,8.08037e-25,-24.092568839855574,1.238e24
+40-node,unregistered,(iii) all seats,0.25,hypergeometric,100000,250000,8.25247e-25,-24.083415969114764,1.212e24
+40-node,unregistered,(iii) all seats,0.25,hypergeometric,1000000,2500000,8.26987e-25,-24.0825012786963,1.209e24
+40-node,registered,(i) block,0.3,binomial,,,6.17504e-1,-0.20936052937918959,1.619e0
+40-node,registered,(i) block,0.3,hypergeometric,10000,30000,6.17523e-1,-0.20934682244783787,1.619e0
+40-node,registered,(i) block,0.3,hypergeometric,100000,300000,6.17506e-1,-0.20935915888164303,1.619e0
+40-node,registered,(i) block,0.3,hypergeometric,1000000,3000000,6.17504e-1,-0.2093603923313907,1.619e0
+40-node,registered,(ii) sign without honest members,0.3,binomial,,,7.70874e-8,-7.11301658573699,1.297e7
+40-node,registered,(ii) sign without honest members,0.3,hypergeometric,10000,30000,7.66239e-8,-7.115635772502866,1.305e7
+40-node,registered,(ii) sign without honest members,0.3,hypergeometric,100000,300000,7.70409e-8,-7.113278390715767,1.298e7
+40-node,registered,(ii) sign without honest members,0.3,hypergeometric,1000000,3000000,7.70828e-8,-7.113042765098498,1.297e7
+40-node,registered,(iii) all seats,0.3,binomial,,,1.21577e-21,-20.915149811213503,8.225e20
+40-node,registered,(iii) all seats,0.3,hypergeometric,10000,30000,1.19383e-21,-20.923058483722812,8.376e20
+40-node,registered,(iii) all seats,0.3,hypergeometric,100000,300000,1.21356e-21,-20.915940272271364,8.240e20
+40-node,registered,(iii) all seats,0.3,hypergeometric,1000000,3000000,1.21555e-21,-20.91522885326019,8.227e20
+40-node,unregistered,(i) block,0.3,binomial,,,2.96751e-1,-0.5276079063364563,3.370e0
+40-node,unregistered,(i) block,0.3,hypergeometric,10000,30000,2.96719e-1,-0.5276541796295362,3.370e0
+40-node,unregistered,(i) block,0.3,hypergeometric,100000,300000,2.96748e-1,-0.5276125321915472,3.370e0
+40-node,unregistered,(i) block,0.3,hypergeometric,1000000,3000000,2.96751e-1,-0.5276083689072273,3.370e0
+40-node,unregistered,(ii) sign without honest members,0.3,binomial,,,1.10304e-6,-5.957409427117007,9.066e5
+40-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,10000,30000,1.09733e-6,-5.95966305460902,9.113e5
+40-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,100000,300000,1.10247e-6,-5.957634692050352,9.071e5
+40-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,1000000,3000000,1.10298e-6,-5.957431952632696,9.066e5
+40-node,unregistered,(iii) all seats,0.3,binomial,,,1.21577e-21,-20.915149811213503,8.225e20
+40-node,unregistered,(iii) all seats,0.3,hypergeometric,10000,30000,1.19383e-21,-20.923058483722812,8.376e20
+40-node,unregistered,(iii) all seats,0.3,hypergeometric,100000,300000,1.21356e-21,-20.915940272271364,8.240e20
+40-node,unregistered,(iii) all seats,0.3,hypergeometric,1000000,3000000,1.21555e-21,-20.91522885326019,8.227e20
+40-node,registered,(i) block,0.33,binomial,,,7.45872e-1,-0.12733577453277078,1.341e0
+40-node,registered,(i) block,0.33,hypergeometric,10000,33000,7.45907e-1,-0.1273152193791134,1.341e0
+40-node,registered,(i) block,0.33,hypergeometric,100000,330000,7.45875e-1,-0.12733371933549265,1.341e0
+40-node,registered,(i) block,0.33,hypergeometric,1000000,3300000,7.45872e-1,-0.12733556901622123,1.341e0
+40-node,registered,(ii) sign without honest members,0.33,binomial,,,6.93946e-7,-6.158674083939829,1.441e6
+40-node,registered,(ii) sign without honest members,0.33,hypergeometric,10000,33000,6.90530e-7,-6.160817275520412,1.448e6
+40-node,registered,(ii) sign without honest members,0.33,hypergeometric,100000,330000,6.93604e-7,-6.158888315259031,1.442e6
+40-node,registered,(ii) sign without honest members,0.33,hypergeometric,1000000,3300000,6.93912e-7,-6.158695506193798,1.441e6
+40-node,registered,(iii) all seats,0.33,binomial,,,5.50247e-20,-19.2594424048845,1.817e19
+40-node,registered,(iii) all seats,0.33,hypergeometric,10000,33000,5.41597e-20,-19.266323702257324,1.846e19
+40-node,registered,(iii) all seats,0.33,hypergeometric,100000,330000,5.49376e-20,-19.26013020591761,1.820e19
+40-node,registered,(iii) all seats,0.33,hypergeometric,1000000,3300000,5.50160e-20,-19.259511181702877,1.818e19
+40-node,unregistered,(i) block,0.33,binomial,,,4.52351e-1,-0.34452463149967016,2.211e0
+40-node,unregistered,(i) block,0.33,hypergeometric,10000,33000,4.52347e-1,-0.3445279873239784,2.211e0
+40-node,unregistered,(i) block,0.33,hypergeometric,100000,330000,4.52350e-1,-0.3445249669394954,2.211e0
+40-node,unregistered,(i) block,0.33,hypergeometric,1000000,3300000,4.52351e-1,-0.3445246650422291,2.211e0
+40-node,unregistered,(ii) sign without honest members,0.33,binomial,,,8.47653e-6,-5.0717820487411345,1.180e5
+40-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,10000,33000,8.44116e-6,-5.073597900104144,1.185e5
+40-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,100000,330000,8.47299e-6,-5.071963559153513,1.180e5
+40-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,1000000,3300000,8.47617e-6,-5.071800199035501,1.180e5
+40-node,unregistered,(iii) all seats,0.33,binomial,,,5.50247e-20,-19.2594424048845,1.817e19
+40-node,unregistered,(iii) all seats,0.33,hypergeometric,10000,33000,5.41597e-20,-19.266323702257324,1.846e19
+40-node,unregistered,(iii) all seats,0.33,hypergeometric,100000,330000,5.49376e-20,-19.26013020591761,1.820e19
+40-node,unregistered,(iii) all seats,0.33,hypergeometric,1000000,3300000,5.50160e-20,-19.259511181702877,1.818e19
+40-node,registered,(i) block,0.4,binomial,,,9.32609e-1,-0.030300352804189856,1.072e0
+40-node,registered,(i) block,0.4,hypergeometric,10000,40000,9.32642e-1,-0.03028499766189796,1.072e0
+40-node,registered,(i) block,0.4,hypergeometric,100000,400000,9.32612e-1,-0.030298817368933584,1.072e0
+40-node,registered,(i) block,0.4,hypergeometric,1000000,4000000,9.32609e-1,-0.030300199261453997,1.072e0
+40-node,registered,(ii) sign without honest members,0.4,binomial,,,4.68976e-5,-4.328849058848384,2.132e4
+40-node,registered,(ii) sign without honest members,0.4,hypergeometric,10000,40000,4.67542e-5,-4.33017929104853,2.139e4
+40-node,registered,(ii) sign without honest members,0.4,hypergeometric,100000,400000,4.68833e-5,-4.328982033182182,2.133e4
+40-node,registered,(ii) sign without honest members,0.4,hypergeometric,1000000,4000000,4.68962e-5,-4.328862355793117,2.132e4
+40-node,registered,(iii) all seats,0.4,binomial,,,1.20893e-16,-15.917600346881503,8.272e15
+40-node,registered,(iii) all seats,0.4,hypergeometric,10000,40000,1.19486e-16,-15.922683935215936,8.369e15
+40-node,registered,(iii) all seats,0.4,hypergeometric,100000,400000,1.20751e-16,-15.918108494842691,8.281e15
+40-node,registered,(iii) all seats,0.4,hypergeometric,1000000,4000000,1.20878e-16,-15.917651159570049,8.273e15
+40-node,unregistered,(i) block,0.4,binomial,,,7.88840e-1,-0.10301118652460417,1.268e0
+40-node,unregistered,(i) block,0.4,hypergeometric,10000,40000,7.88888e-1,-0.10298456214731999,1.268e0
+40-node,unregistered,(i) block,0.4,hypergeometric,100000,400000,7.88845e-1,-0.10300852454195564,1.268e0
+40-node,unregistered,(i) block,0.4,hypergeometric,1000000,4000000,7.88840e-1,-0.10301092033088821,1.268e0
+40-node,unregistered,(ii) sign without honest members,0.4,binomial,,,4.02387e-4,-3.395355714186021,2.485e3
+40-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,10000,40000,4.01394e-4,-3.396428702853939,2.491e3
+40-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,100000,400000,4.02288e-4,-3.395462973032245,2.486e3
+40-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,1000000,4000000,4.02377e-4,-3.3953664396706102,2.485e3
+40-node,unregistered,(iii) all seats,0.4,binomial,,,1.20893e-16,-15.917600346881503,8.272e15
+40-node,unregistered,(iii) all seats,0.4,hypergeometric,10000,40000,1.19486e-16,-15.922683935215936,8.369e15
+40-node,unregistered,(iii) all seats,0.4,hypergeometric,100000,400000,1.20751e-16,-15.918108494842691,8.281e15
+40-node,unregistered,(iii) all seats,0.4,hypergeometric,1000000,4000000,1.20878e-16,-15.917651159570049,8.273e15
+30-node,registered,(i) block,0.05,binomial,,,1.06241e-3,-2.9737081813977504,9.413e2
+30-node,registered,(i) block,0.05,hypergeometric,10000,5000,1.06132e-3,-2.974155369846976,9.422e2
+30-node,registered,(i) block,0.05,hypergeometric,100000,50000,1.06230e-3,-2.97375289094607,9.414e2
+30-node,registered,(i) block,0.05,hypergeometric,1000000,500000,1.06240e-3,-2.9737126522596498,9.413e2
+30-node,registered,(ii) sign without honest members,0.05,binomial,,,1.45624e-21,-20.83676829649604,6.867e20
+30-node,registered,(ii) sign without honest members,0.05,hypergeometric,10000,5000,1.40158e-21,-20.85338243436836,7.135e20
+30-node,registered,(ii) sign without honest members,0.05,hypergeometric,100000,50000,1.45068e-21,-20.838427477512997,6.893e20
+30-node,registered,(ii) sign without honest members,0.05,hypergeometric,1000000,500000,1.45568e-21,-20.83693419231564,6.870e20
+30-node,registered,(iii) all seats,0.05,binomial,,,9.31323e-40,-39.03089986991944,1.074e39
+30-node,registered,(iii) all seats,0.05,hypergeometric,10000,5000,8.57297e-40,-39.066868650761265,1.166e39
+30-node,registered,(iii) all seats,0.05,hypergeometric,100000,50000,9.23655e-40,-39.03449005525172,1.083e39
+30-node,registered,(iii) all seats,0.05,hypergeometric,1000000,500000,9.30553e-40,-39.03125882172115,1.075e39
+30-node,unregistered,(i) block,0.05,binomial,,,1.09694e-7,-6.959818043781517,9.116e6
+30-node,unregistered,(i) block,0.05,hypergeometric,10000,5000,1.08750e-7,-6.96356917713527,9.195e6
+30-node,unregistered,(i) block,0.05,hypergeometric,100000,50000,1.09599e-7,-6.960192867205318,9.124e6
+30-node,unregistered,(i) block,0.05,hypergeometric,1000000,500000,1.09684e-7,-6.9598555232278905,9.117e6
+30-node,unregistered,(ii) sign without honest members,0.05,binomial,,,1.75951e-19,-18.754608208006893,5.683e18
+30-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,10000,5000,1.70023e-19,-18.769492586444052,5.882e18
+30-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,100000,50000,1.75350e-19,-18.756094726720548,5.703e18
+30-node,unregistered,(ii) sign without honest members,0.05,hypergeometric,1000000,500000,1.75891e-19,-18.754756840724284,5.685e18
+30-node,unregistered,(iii) all seats,0.05,binomial,,,9.31323e-40,-39.03089986991944,1.074e39
+30-node,unregistered,(iii) all seats,0.05,hypergeometric,10000,5000,8.57297e-40,-39.066868650761265,1.166e39
+30-node,unregistered,(iii) all seats,0.05,hypergeometric,100000,50000,9.23655e-40,-39.03449005525172,1.083e39
+30-node,unregistered,(iii) all seats,0.05,hypergeometric,1000000,500000,9.30553e-40,-39.03125882172115,1.075e39
+30-node,registered,(i) block,0.1,binomial,,,1.51508e-2,-1.8195656580948665,6.600e1
+30-node,registered,(i) block,0.1,hypergeometric,10000,10000,1.51433e-2,-1.8197781570938005,6.604e1
+30-node,registered,(i) block,0.1,hypergeometric,100000,100000,1.51500e-2,-1.8195869051835025,6.601e1
+30-node,registered,(i) block,0.1,hypergeometric,1000000,1000000,1.51507e-2,-1.8195677827756214,6.600e1
+30-node,registered,(ii) sign without honest members,0.1,binomial,,,1.96541e-15,-14.70654652776252,5.088e14
+30-node,registered,(ii) sign without honest members,0.1,hypergeometric,10000,10000,1.93182e-15,-14.714033975375582,5.176e14
+30-node,registered,(ii) sign without honest members,0.1,hypergeometric,100000,100000,1.96203e-15,-14.707294726770975,5.097e14
+30-node,registered,(ii) sign without honest members,0.1,hypergeometric,1000000,1000000,1.96507e-15,-14.706621342211509,5.089e14
+30-node,registered,(iii) all seats,0.1,binomial,,,1.00000e-30,-30.0,1.000e30
+30-node,registered,(iii) all seats,0.1,hypergeometric,10000,10000,9.61566e-31,-30.0170210475578,1.040e30
+30-node,registered,(iii) all seats,0.1,hypergeometric,100000,100000,9.96092e-31,-30.00170044683579,1.004e30
+30-node,registered,(iii) all seats,0.1,hypergeometric,1000000,1000000,9.99609e-31,-30.00017002812881,1.000e30
+30-node,unregistered,(i) block,0.1,binomial,,,8.90779e-5,-4.050230157578092,1.123e4
+30-node,unregistered,(i) block,0.1,hypergeometric,10000,10000,8.87900e-5,-4.051635798226627,1.126e4
+30-node,unregistered,(i) block,0.1,hypergeometric,100000,100000,8.90491e-5,-4.050370657167193,1.123e4
+30-node,unregistered,(i) block,0.1,hypergeometric,1000000,1000000,8.90750e-5,-4.050244206892614,1.123e4
+30-node,unregistered,(ii) sign without honest members,0.1,binomial,,,1.10565e-13,-12.956380824433282,9.044e12
+30-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,10000,10000,1.08890e-13,-12.963011058077544,9.184e12
+30-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,100000,100000,1.10397e-13,-12.957043380359355,9.058e12
+30-node,unregistered,(ii) sign without honest members,0.1,hypergeometric,1000000,1000000,1.10549e-13,-12.956447075356145,9.046e12
+30-node,unregistered,(iii) all seats,0.1,binomial,,,1.00000e-30,-30.0,1.000e30
+30-node,unregistered,(iii) all seats,0.1,hypergeometric,10000,10000,9.61566e-31,-30.0170210475578,1.040e30
+30-node,unregistered,(iii) all seats,0.1,hypergeometric,100000,100000,9.96092e-31,-30.00170044683579,1.004e30
+30-node,unregistered,(iii) all seats,0.1,hypergeometric,1000000,1000000,9.99609e-31,-30.00017002812881,1.000e30
+30-node,registered,(i) block,0.15,binomial,,,7.08088e-2,-1.1499127216622291,1.412e1
+30-node,registered,(i) block,0.15,hypergeometric,10000,15000,7.07900e-2,-1.1500279934795827,1.413e1
+30-node,registered,(i) block,0.15,hypergeometric,100000,150000,7.08069e-2,-1.1499242469575428,1.412e1
+30-node,registered,(i) block,0.15,hypergeometric,1000000,1500000,7.08086e-2,-1.1499138741728991,1.412e1
+30-node,registered,(ii) sign without honest members,0.15,binomial,,,6.17193e-12,-11.209578677531972,1.620e11
+30-node,registered,(ii) sign without honest members,0.15,hypergeometric,10000,15000,6.10891e-12,-11.214036116480827,1.637e11
+30-node,registered,(ii) sign without honest members,0.15,hypergeometric,100000,150000,6.16561e-12,-11.210024187617844,1.622e11
+30-node,registered,(ii) sign without honest members,0.15,hypergeometric,1000000,1500000,6.17130e-12,-11.209623226204133,1.620e11
+30-node,registered,(iii) all seats,0.15,binomial,,,1.91751e-25,-24.717262228329563,5.215e24
+30-node,registered,(iii) all seats,0.15,hypergeometric,10000,15000,1.87079e-25,-24.727975666058335,5.345e24
+30-node,registered,(iii) all seats,0.15,hypergeometric,100000,150000,1.91279e-25,-24.718332844942058,5.228e24
+30-node,registered,(iii) all seats,0.15,hypergeometric,1000000,1500000,1.91704e-25,-24.717369282726427,5.216e24
+30-node,unregistered,(i) block,0.15,binomial,,,2.94236e-3,-2.5313035411144966,3.399e2
+30-node,unregistered,(i) block,0.15,hypergeometric,10000,15000,2.93790e-3,-2.531962641803215,3.404e2
+30-node,unregistered,(i) block,0.15,hypergeometric,100000,150000,2.94192e-3,-2.531369427849551,3.399e2
+30-node,unregistered,(i) block,0.15,hypergeometric,1000000,1500000,2.94232e-3,-2.5313101295547646,3.399e2
+30-node,unregistered,(ii) sign without honest members,0.15,binomial,,,2.14491e-10,-9.668590416982475,4.662e9
+30-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,10000,15000,2.12578e-10,-9.672482255038272,4.704e9
+30-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,100000,150000,2.14299e-10,-9.668979401780263,4.666e9
+30-node,unregistered,(ii) sign without honest members,0.15,hypergeometric,1000000,1500000,2.14472e-10,-9.668629313473534,4.663e9
+30-node,unregistered,(iii) all seats,0.15,binomial,,,1.91751e-25,-24.717262228329563,5.215e24
+30-node,unregistered,(iii) all seats,0.15,hypergeometric,10000,15000,1.87079e-25,-24.727975666058335,5.345e24
+30-node,unregistered,(iii) all seats,0.15,hypergeometric,100000,150000,1.91279e-25,-24.718332844942058,5.228e24
+30-node,unregistered,(iii) all seats,0.15,hypergeometric,1000000,1500000,1.91704e-25,-24.717369282726427,5.216e24
+30-node,registered,(i) block,0.2,binomial,,,1.97088e-1,-0.7053408432432242,5.074e0
+30-node,registered,(i) block,0.2,hypergeometric,10000,20000,1.97065e-1,-0.7053909522495339,5.074e0
+30-node,registered,(i) block,0.2,hypergeometric,100000,200000,1.97085e-1,-0.7053458531759631,5.074e0
+30-node,registered,(i) block,0.2,hypergeometric,1000000,2000000,1.97087e-1,-0.7053413442268202,5.074e0
+30-node,registered,(ii) sign without honest members,0.2,binomial,,,1.59475e-9,-8.797308425867435,6.271e8
+30-node,registered,(ii) sign without honest members,0.2,hypergeometric,10000,20000,1.58395e-9,-8.800259629841563,6.313e8
+30-node,registered,(ii) sign without honest members,0.2,hypergeometric,100000,200000,1.59366e-9,-8.797603421499812,6.275e8
+30-node,registered,(ii) sign without honest members,0.2,hypergeometric,1000000,2000000,1.59464e-9,-8.797337924183708,6.271e8
+30-node,registered,(iii) all seats,0.2,binomial,,,1.07374e-21,-20.969100130080562,9.313e20
+30-node,registered,(iii) all seats,0.2,hypergeometric,10000,20000,1.05521e-21,-20.976661315932606,9.477e20
+30-node,registered,(iii) all seats,0.2,hypergeometric,100000,200000,1.07188e-21,-20.969855847067144,9.329e20
+30-node,registered,(iii) all seats,0.2,hypergeometric,1000000,2000000,1.07356e-21,-20.969175697766264,9.315e20
+30-node,unregistered,(i) block,0.2,binomial,,,2.56163e-2,-1.5914843564830718,3.904e1
+30-node,unregistered,(i) block,0.2,hypergeometric,10000,20000,2.55976e-2,-1.5918001805595168,3.907e1
+30-node,unregistered,(i) block,0.2,hypergeometric,100000,200000,2.56144e-2,-1.5915159293925605,3.904e1
+30-node,unregistered,(i) block,0.2,hypergeometric,1000000,2000000,2.56161e-2,-1.5914875136790734,3.904e1
+30-node,unregistered,(ii) sign without honest members,0.2,binomial,,,3.83052e-8,-7.4167418415832636,2.611e7
+30-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,10000,20000,3.80825e-8,-7.419274302580369,2.626e7
+30-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,100000,200000,3.82829e-8,-7.416994982493936,2.612e7
+30-node,unregistered,(ii) sign without honest members,0.2,hypergeometric,1000000,2000000,3.83030e-8,-7.416767154622999,2.611e7
+30-node,unregistered,(iii) all seats,0.2,binomial,,,1.07374e-21,-20.969100130080562,9.313e20
+30-node,unregistered,(iii) all seats,0.2,hypergeometric,10000,20000,1.05521e-21,-20.976661315932606,9.477e20
+30-node,unregistered,(iii) all seats,0.2,hypergeometric,100000,200000,1.07188e-21,-20.969855847067144,9.329e20
+30-node,unregistered,(iii) all seats,0.2,hypergeometric,1000000,2000000,1.07356e-21,-20.969175697766264,9.315e20
+30-node,registered,(i) block,0.25,binomial,,,3.90331e-1,-0.4085665558280205,2.562e0
+30-node,registered,(i) block,0.25,hypergeometric,10000,25000,3.90323e-1,-0.4085758605176224,2.562e0
+30-node,registered,(i) block,0.25,hypergeometric,100000,250000,3.90331e-1,-0.4085674860532471,2.562e0
+30-node,registered,(i) block,0.25,hypergeometric,1000000,2500000,3.90331e-1,-0.4085666488481081,2.562e0
+30-node,registered,(ii) sign without honest members,0.25,binomial,,,1.03460e-7,-6.985229504625195,9.666e6
+30-node,registered,(ii) sign without honest members,0.25,hypergeometric,10000,25000,1.02971e-7,-6.987284874421487,9.711e6
+30-node,registered,(ii) sign without honest members,0.25,hypergeometric,100000,250000,1.03411e-7,-6.98543496720886,9.670e6
+30-node,registered,(ii) sign without honest members,0.25,hypergeometric,1000000,2500000,1.03455e-7,-6.985250050139943,9.666e6
+30-node,registered,(iii) all seats,0.25,binomial,,,8.67362e-19,-18.06179973983887,1.153e18
+30-node,registered,(iii) all seats,0.25,hypergeometric,10000,25000,8.56111e-19,-18.067470071096682,1.168e18
+30-node,registered,(iii) all seats,0.25,hypergeometric,100000,250000,8.66231e-19,-18.0623665220049,1.154e18
+30-node,registered,(iii) all seats,0.25,hypergeometric,1000000,2500000,8.67249e-19,-18.061856415547417,1.153e18
+30-node,unregistered,(i) block,0.25,binomial,,,1.05728e-1,-0.9758094790525362,9.458e0
+30-node,unregistered,(i) block,0.25,hypergeometric,10000,25000,1.05695e-1,-0.9759463753569335,9.461e0
+30-node,unregistered,(i) block,0.25,hypergeometric,100000,250000,1.05725e-1,-0.9758231650315885,9.459e0
+30-node,unregistered,(i) block,0.25,hypergeometric,1000000,2500000,1.05728e-1,-0.9758108476139391,9.458e0
+30-node,unregistered,(ii) sign without honest members,0.25,binomial,,,1.82064e-6,-5.739775117993151,5.493e5
+30-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,10000,25000,1.81342e-6,-5.741501017616596,5.514e5
+30-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,100000,250000,1.81992e-6,-5.739947646084296,5.495e5
+30-node,unregistered,(ii) sign without honest members,0.25,hypergeometric,1000000,2500000,1.82057e-6,-5.739792370183828,5.493e5
+30-node,unregistered,(iii) all seats,0.25,binomial,,,8.67362e-19,-18.06179973983887,1.153e18
+30-node,unregistered,(iii) all seats,0.25,hypergeometric,10000,25000,8.56111e-19,-18.067470071096682,1.168e18
+30-node,unregistered,(iii) all seats,0.25,hypergeometric,100000,250000,8.66231e-19,-18.0623665220049,1.154e18
+30-node,unregistered,(iii) all seats,0.25,hypergeometric,1000000,2500000,8.67249e-19,-18.061856415547417,1.153e18
+30-node,registered,(i) block,0.3,binomial,,,6.05030e-1,-0.21822286874256847,1.653e0
+30-node,registered,(i) block,0.3,hypergeometric,10000,30000,6.05046e-1,-0.21821187904385297,1.653e0
+30-node,registered,(i) block,0.3,hypergeometric,100000,300000,6.05032e-1,-0.21822176988940356,1.653e0
+30-node,registered,(i) block,0.3,hypergeometric,1000000,3000000,6.05030e-1,-0.21822275885842046,1.653e0
+30-node,registered,(ii) sign without honest members,0.3,binomial,,,2.76503e-6,-5.558300095021707,3.617e5
+30-node,registered,(ii) sign without honest members,0.3,hypergeometric,10000,30000,2.75571e-6,-5.559765931846503,3.629e5
+30-node,registered,(ii) sign without honest members,0.3,hypergeometric,100000,300000,2.76410e-6,-5.5584466315680885,3.618e5
+30-node,registered,(ii) sign without honest members,0.3,hypergeometric,1000000,3000000,2.76494e-6,-5.55831474820517,3.617e5
+30-node,registered,(iii) all seats,0.3,binomial,,,2.05891e-16,-15.686362358410125,4.857e15
+30-node,registered,(iii) all seats,0.3,hypergeometric,10000,30000,2.03811e-16,-15.690772326724904,4.907e15
+30-node,registered,(iii) all seats,0.3,hypergeometric,100000,300000,2.05682e-16,-15.686803186093602,4.862e15
+30-node,registered,(iii) all seats,0.3,hypergeometric,1000000,3000000,2.05870e-16,-15.686406439487875,4.857e15
+30-node,unregistered,(i) block,0.3,binomial,,,2.69630e-1,-0.5692324105083131,3.709e0
+30-node,unregistered,(i) block,0.3,hypergeometric,10000,30000,2.69603e-1,-0.5692747674695937,3.709e0
+30-node,unregistered,(i) block,0.3,hypergeometric,100000,300000,2.69627e-1,-0.5692366451776465,3.709e0
+30-node,unregistered,(i) block,0.3,hypergeometric,1000000,3000000,2.69629e-1,-0.5692328339649819,3.709e0
+30-node,unregistered,(ii) sign without honest members,0.3,binomial,,,3.68701e-5,-4.43332591101338,2.712e4
+30-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,10000,30000,3.67686e-5,-4.434523090081893,2.720e4
+30-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,100000,300000,3.68599e-5,-4.433445590470175,2.713e4
+30-node,unregistered,(ii) sign without honest members,0.3,hypergeometric,1000000,3000000,3.68691e-5,-4.433337878574708,2.712e4
+30-node,unregistered,(iii) all seats,0.3,binomial,,,2.05891e-16,-15.686362358410125,4.857e15
+30-node,unregistered,(iii) all seats,0.3,hypergeometric,10000,30000,2.03811e-16,-15.690772326724904,4.907e15
+30-node,unregistered,(iii) all seats,0.3,hypergeometric,100000,300000,2.05682e-16,-15.686803186093602,4.862e15
+30-node,unregistered,(iii) all seats,0.3,hypergeometric,1000000,3000000,2.05870e-16,-15.686406439487875,4.857e15
+30-node,registered,(i) block,0.33,binomial,,,7.20294e-1,-0.14249031067582862,1.388e0
+30-node,registered,(i) block,0.33,hypergeometric,10000,33000,7.20320e-1,-0.14247466649798213,1.388e0
+30-node,registered,(i) block,0.33,hypergeometric,100000,330000,7.20296e-1,-0.14248874643661225,1.388e0
+30-node,registered,(i) block,0.33,hypergeometric,1000000,3300000,7.20294e-1,-0.14249015425369294,1.388e0
+30-node,registered,(ii) sign without honest members,0.33,binomial,,,1.45432e-5,-4.837339445666334,6.876e4
+30-node,registered,(ii) sign without honest members,0.33,hypergeometric,10000,33000,1.45030e-5,-4.838541192374834,6.895e4
+30-node,registered,(ii) sign without honest members,0.33,hypergeometric,100000,330000,1.45392e-5,-4.837459583899065,6.878e4
+30-node,registered,(ii) sign without honest members,0.33,hypergeometric,1000000,3300000,1.45428e-5,-4.837351459125362,6.876e4
+30-node,registered,(iii) all seats,0.33,binomial,,,3.59268e-15,-14.444581803663375,2.783e14
+30-node,registered,(iii) all seats,0.33,hypergeometric,10000,33000,3.56107e-15,-14.44841893440275,2.808e14
+30-node,registered,(iii) all seats,0.33,hypergeometric,100000,330000,3.58951e-15,-14.44496537985529,2.786e14
+30-node,registered,(iii) all seats,0.33,hypergeometric,1000000,3300000,3.59236e-15,-14.4446201599144,2.784e14
+30-node,unregistered,(i) block,0.33,binomial,,,3.99981e-1,-0.3979608297622619,2.500e0
+30-node,unregistered,(i) block,0.33,hypergeometric,10000,33000,3.99971e-1,-0.3979714874981184,2.500e0
+30-node,unregistered,(i) block,0.33,hypergeometric,100000,330000,3.99980e-1,-0.3979618952746371,2.500e0
+30-node,unregistered,(i) block,0.33,hypergeometric,1000000,3300000,3.99981e-1,-0.3979609363108878,2.500e0
+30-node,unregistered,(ii) sign without honest members,0.33,binomial,,,1.65881e-4,-3.780203629011176,6.028e3
+30-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,10000,33000,1.65514e-4,-3.7811650904670664,6.042e3
+30-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,100000,330000,1.65844e-4,-3.780299745884289,6.030e3
+30-node,unregistered,(ii) sign without honest members,0.33,hypergeometric,1000000,3300000,1.65877e-4,-3.7802132404058675,6.029e3
+30-node,unregistered,(iii) all seats,0.33,binomial,,,3.59268e-15,-14.444581803663375,2.783e14
+30-node,unregistered,(iii) all seats,0.33,hypergeometric,10000,33000,3.56107e-15,-14.44841893440275,2.808e14
+30-node,unregistered,(iii) all seats,0.33,hypergeometric,100000,330000,3.58951e-15,-14.44496537985529,2.786e14
+30-node,unregistered,(iii) all seats,0.33,hypergeometric,1000000,3300000,3.59236e-15,-14.4446201599144,2.784e14
+30-node,registered,(i) block,0.4,binomial,,,9.04426e-1,-0.04362707173925884,1.106e0
+30-node,registered,(i) block,0.4,hypergeometric,10000,40000,9.04454e-1,-0.04361351314525308,1.106e0
+30-node,registered,(i) block,0.4,hypergeometric,100000,400000,9.04429e-1,-0.04362571596211495,1.106e0
+30-node,registered,(i) block,0.4,hypergeometric,1000000,4000000,9.04426e-1,-0.043626936162365126,1.106e0
+30-node,registered,(ii) sign without honest members,0.4,binomial,,,3.54084e-4,-3.450894309961555,2.824e3
+30-node,registered,(ii) sign without honest members,0.4,hypergeometric,10000,40000,3.53472e-4,-3.451645073078584,2.829e3
+30-node,registered,(ii) sign without honest members,0.4,hypergeometric,100000,400000,3.54022e-4,-3.450969365940974,2.825e3
+30-node,registered,(ii) sign without honest members,0.4,hypergeometric,1000000,4000000,3.54077e-4,-3.450901815356243,2.824e3
+30-node,registered,(iii) all seats,0.4,binomial,,,1.15292e-12,-11.938200260161128,8.674e11
+30-node,registered,(iii) all seats,0.4,hypergeometric,10000,40000,1.14542e-12,-11.941035007346045,8.730e11
+30-node,registered,(iii) all seats,0.4,hypergeometric,100000,400000,1.15217e-12,-11.938483647063869,8.679e11
+30-node,registered,(iii) all seats,0.4,hypergeometric,1000000,4000000,1.15285e-12,-11.938228597973602,8.674e11
+30-node,unregistered,(i) block,0.4,binomial,,,7.08528e-1,-0.14964289732520797,1.411e0
+30-node,unregistered,(i) block,0.4,hypergeometric,10000,40000,7.08559e-1,-0.14962406664772843,1.411e0
+30-node,unregistered,(i) block,0.4,hypergeometric,100000,400000,7.08531e-1,-0.149641014540979,1.411e0
+30-node,unregistered,(i) block,0.4,hypergeometric,1000000,4000000,7.08528e-1,-0.14964270904961907,1.411e0
+30-node,unregistered,(ii) sign without honest members,0.4,binomial,,,2.85388e-3,-2.5445638952117626,3.504e2
+30-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,10000,40000,2.85019e-3,-2.5451264148758277,3.509e2
+30-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,100000,400000,2.85351e-3,-2.544620131673774,3.504e2
+30-node,unregistered,(ii) sign without honest members,0.4,hypergeometric,1000000,4000000,2.85385e-3,-2.5445695187029713,3.504e2
+30-node,unregistered,(iii) all seats,0.4,binomial,,,1.15292e-12,-11.938200260161128,8.674e11
+30-node,unregistered,(iii) all seats,0.4,hypergeometric,10000,40000,1.14542e-12,-11.941035007346045,8.730e11
+30-node,unregistered,(iii) all seats,0.4,hypergeometric,100000,400000,1.15217e-12,-11.938483647063869,8.679e11
+30-node,unregistered,(iii) all seats,0.4,hypergeometric,1000000,4000000,1.15285e-12,-11.938228597973602,8.674e11

@@ -1,6 +1,6 @@
 # results/
 
-Generated outputs. Everything in this folder except this README is ignored by git. Regenerate it with the `gb` tool rather than editing it.
+Generated outputs. Everything in this folder is ignored by git except this README and the **reference run** in [`analytic/reference/`](analytic/reference/). The reference run is committed so that the repository contains the tables, charts, summary and cross-check verdicts behind the public brief; start with its [`SUMMARY.md`](analytic/reference/SUMMARY.md). Its `run.json` records the commit it was produced from and a SHA-256 of every file. New runs stay ignored. Regenerate outputs with the `gb` tool rather than editing them.
 
 Each analysis writes one directory per run, `results/<analysis>/<run-id>/`. The run id is `YYYYMMDDTHHMMSSZ_<commit>_s<seed>`. Each run directory contains:
 
@@ -14,4 +14,4 @@ Each analysis writes one directory per run, `results/<analysis>/<run-id>/`. The 
 | `config.resolved.toml` | The exact configuration used |
 | `run.json` | Run id, time, git commit, dirty flag, seed, config hash, toolchain, and a SHA-256 for every file above |
 
-To check that a rerun reproduces a run, compare the `sha256` fields in the two `run.json` files.
+To check that a rerun reproduces a run, compare the `sha256` fields in the two `run.json` files. To check the reference run, check out the commit in `analytic/reference/run.json`, run `cargo run --release -p gb-cli -- analytic`, and compare the new run's `run.json` with the reference one.

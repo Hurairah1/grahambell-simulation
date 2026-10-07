@@ -58,7 +58,9 @@ Options:
 
 ## Where each output lives
 
-Inside `results/analytic/<run-id>/`:
+The reference run for this release is committed in [`results/analytic/reference/`](results/analytic/reference/); start with its [`SUMMARY.md`](results/analytic/reference/SUMMARY.md). It was produced from a clean commit, which its `run.json` records together with a SHA-256 of every file. New runs are written to `results/analytic/<run-id>/` and stay ignored by git.
+
+Inside each run directory (`results/analytic/<run-id>/`, or `results/analytic/reference/`):
 
 | File | What it holds |
 |---|---|
@@ -127,7 +129,7 @@ Unknown keys are rejected. A file cannot change a status tag, because status tag
 | `crates/gb-runlog` | Run provenance: run ids, git commit, seed, output checksums, seeded random streams |
 | `crates/gb-analytic` | M1 analytical baseline: exact formulas, exact probabilities, cross-checks |
 | `crates/gb-cli` | The `gb` command-line tool: tables, charts, summary |
-| `results/` | Generated outputs (not committed) |
+| `results/` | Generated outputs; only the reference run in `results/analytic/reference/` is committed |
 
 ## Licence
 

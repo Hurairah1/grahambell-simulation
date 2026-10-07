@@ -1,5 +1,8 @@
 /target/
 /results/*
 !/results/README.md
+!/results/analytic/
+/results/analytic/*
+!/results/analytic/reference/
 /.history/
 .DS_Store

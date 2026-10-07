@@ -1,0 +1,54 @@
+key,status,value,sweep,unit,spec_ref,description
+pacing.hashes_per_second,D,1.0,,hash/s,§2,Hash attempts per second per admitted /64 (unregistered) or per ID (registered).
+issuance.pow_id_target_interval_s,D,30.0,,s,"§2, §3.9",Target interval between PoW-ID blocks.
+issuance.rate_mode,P,fixed,"{ note = ""fixed is decided; adaptive is the proposed variant (SPEC §3.9)"", values = [""fixed"", ""adaptive""] }",,"§2, §3.9","Fixed issuance rate, or the adaptive variant capped by registered IDs."
+issuance.difficulty_variant,D,count_based,"{ note = ""Variant A (Bitcoin-style retarget) is the comparison (SPEC §3.8)"", values = [""count_based"", ""bitcoin_retarget""] }",,"§2, §3.8","Difficulty rule: Variant B (count-based, default) or Variant A (Bitcoin-style, comparison)."
+issuance.retarget_window_blocks,D,144,,PoW-ID blocks,"§2, §3.8",Variant A comparison: retarget window K.
+issuance.retarget_clamp_factor,D,4.0,,factor,"§2, §3.8",Variant A comparison: largest difficulty change per retarget.
+issuance.count_based_correction,P,—,,,"§2, §3.8",Variant B's correction from recent block times; no rule yet (M3 proposes and tests one).
+issuance.min_attack_time_floor_years,P,2.0,"{ range = [1.0, 10.0] }",years,"§2, §3.9",Minimum attack time floor T_min for adaptive issuance.
+issuance.cap_checkpoint_interval_fraction_of_t_min,D,1.0,"{ values = [0.25, 0.5, 1.0] }",× T_min,"§2, §3.9",Interval between recalculations of the adaptive cap.
+issuance.cap_safety_factor,D,"{ denominator = 6, numerator = 7 }",,fraction,"§2, §3.9",Safety factor k in the adaptive cap registered_IDs / (k × T_min).
+issuance.confirmation_depth_blocks,O,6,"{ range = [3, 12] }",PoW-ID blocks,"§2, §3.7",Confirmations before a new ID becomes active.
+issuance.start_rule,D,a,"{ note = ""rule (b) is the rejected alternative, kept for S13"", values = [""a"", ""b""] }",,§3.5,Where the PoW-ID hash chain starts; rule (b) is kept for comparison in S13.
+issuance.same_height_tie_break,P,lower_block_hash,"{ values = [""lower_block_hash"", ""first_seen""] }",,§3.7,Which of two valid PoW-ID blocks at the same height is kept.
+transactions.pow_tx_interval_s,O,10.0,"{ range = [1.0, 10.0] }",s,"§2, §5",Interval between PoW-Tx blocks.
+witness.wc_size,D,10,,nodes,§2,Witness nodes per Witness Chain.
+witness.subordinate_wcs_per_kwc,D,3,"{ note = ""1 + 2 (30 nodes) for comparison"", values = [3, 2] }",WCs,§2,Subordinate WCs per KWC (3 gives 40 nodes; 2 is the 30-node comparison).
+witness.kwc_count_rule,D,equals_wc_count,,,§2,Each WC leads one KWC and is a subordinate in as many as a KWC has subordinates.
+witness.ring_offsets,D,"[1, 4, 6]",,WCs,"§2, §4.2",Golomb-ring offsets: KWC w has subordinate WCs (w + offset) mod W.
+witness.ring_offsets_30_node,D,"[1, 3]",,WCs,"§2, §4.2",Golomb-ring offsets in the 30-node comparison layout.
+witness.allocation_beacon_delay_blocks,O,6,"{ values = [3, 6, 12] }",PoW-ID blocks,"§2, §4.2",Blocks between an ID's confirmation and the block whose hash is its allocation beacon.
+witness.watched_registered_per_node,D,800,,miners,§2,Registered miners watched per witness node.
+witness.watched_unregistered_per_node,D,200,,miners,§2,Unregistered miners watched per witness node.
+quorum.registered_leader_min,D,7,,signatures,§2,Registered-miner PoWit quorum: minimum from the leader WC.
+quorum.registered_subordinate_min,D,21,,signatures,§2,Registered-miner PoWit quorum: minimum from the subordinate WCs (40-node KWC).
+quorum.registered_subordinate_min_30_node,D,14,,signatures,§2,Registered-miner PoWit quorum from subordinates in the 30-node comparison.
+quorum.unregistered_total_min,D,27,,signatures,§2,Unregistered-miner PoWit quorum: any members of the 40-node KWC.
+quorum.unregistered_total_min_30_node,D,20,,signatures,§2,Unregistered-miner PoWit quorum in the 30-node comparison.
+entropy.signers,D,all_online_members,,,"§2, §3.4",KWC members whose signatures the entropy aggregate must include.
+capacity.miners_per_leader_wc,D,250,,miners,§2,Total miner capacity per leader WC (registered + unregistered).
+capacity.unregistered_per_leader_wc,O,50,"{ note = ""registered/unregistered split 200/50, 100/150, 15/235"", values = [50, 150, 235] }",miners,§2,Unregistered share of the capacity; the registered share is the remainder.
+capacity.spare_target_fraction,D,0.33,,fraction,§2,Spare witnessing capacity target over demand.
+network.node_request_rate_limit_per_s,D,1000,,req/s,§2,Per-node request rate limit.
+timing.grace_epoch_rounds,D,5,,rounds,§2,Grace epoch in rounds of the miner's own block type.
+timing.clock_tolerance_s,O,2.0,"{ range = [0.5, 10.0] }",s,"§2, §3.6, §3.7",Clock tolerance δ for signing and validation.
+admission.post_admission_wait_rounds,O,5,"{ range = [1, 10] }",rounds,"§2, §3.1",Wait after admission before mining.
+admission.convergence_interval_epochs,O,1.0,"{ range = [0.5, 3.0] }",epochs,"§2, §3.1",Convergence interval before a claim becomes active.
+admission.peer_bootstrap_count,D,8,"{ range = [4, 8] }",peers,"§2, §3.1",Registered peers a newcomer bootstraps from.
+cac.size,D,600,"{ note = ""100–1,000 for comparison"", range = [100, 1000] }",members,"§2, §4.3",Chain Allocation Committee size.
+cac.membership_policy,D,first_in_first_out,,,"§2, §4.3",Committee membership policy.
+cac.join_every_n_tx_blocks,D,10,,PoW-Tx blocks,"§2, §4.3",One new committee member joins for every n-th PoW-Tx block.
+cac.seat_selection,D,lottery,"{ note = ""the v0.2 rule (miner of every 10th PoW-Tx block) is the comparison"", values = [""lottery"", ""tenth_block_miner""] }",,"§2, §4.3","How the new member is chosen: lottery over the canonical active list, or the v0.2 rule."
+cac.lottery_beacon_offset_blocks,O,3,"{ values = [1, 3, 6, 12] }",PoW-Tx blocks,"§2, §4.3",Lottery beacon offset k: the draw for block B uses the hash of block B + k.
+cac.approval_threshold,D,"{ denominator = 3, numerator = 2 }",,fraction,"§2, §4.3","Approval threshold as a fraction of members, rounded up."
+genesis.ids,D,2900000,"{ values = [1000000, 2100000, 2900000, 5000000, 10000000] }",IDs,§2,Number of genesis IDs G.
+genesis.distribution,D,kyc_one_per_verified_person,,,§2,Genesis distribution method.
+genesis.secretly_controlled_fraction,O,0.0,"{ range = [0.0, 0.2] }",fraction,§2,Fraction of genesis IDs secretly controlled by one party.
+offline.deactivation_threshold_s,O,—,"{ values = [3600.0, 21600.0, 86400.0, 259200.0, 604800.0] }",s,"§2, §4.7",Absence after which an ID is deactivated.
+offline.reactivation_wait_s,O,—,"{ values = [86400.0, 604800.0, 1209600.0, 2592000.0] }",s,"§2, §4.7",Wait before a returning ID is re-activated.
+offline.long_absence_threshold_s,O,2592000.0,"{ values = [259200.0, 604800.0, 2592000.0, 7776000.0, 31536000.0] }",s,"§2, §4.2, §4.7","Long-absence threshold L: a seat is vacated only after a longer continuous absence, or a ban."
+penalties.suspension_ladder_s,D,"[86400, 2592000]",,s,"§2, §4.8",Successive suspensions for lesser offences.
+penalties.final_step,D,permanent,,,"§2, §4.8",Final step of the penalty ladder.
+crypto.signature_scheme,D,bls12_381_aggregate_bitfield_pop,,,§2,Signature scheme.
+crypto.hash_function,P,sha256,,,§2,Hash function.

@@ -1,0 +1,31 @@
+layout,approvals,attacker_fraction,failure_target,minimum_online_fraction,status,p_fail_at_minimum,p_fail_one_step_below,p_fail_at_full_uptime
+unregistered PoWit,27 of 40,0.0,0.01,0.815,reachable,9.97511e-3,1.00225e-2,0
+unregistered PoWit,27 of 40,0.0,0.001,0.8551,reachable,9.94520e-4,1.00143e-3,0
+unregistered PoWit,27 of 40,0.1,0.01,0.9055,reachable,9.99879e-3,1.00415e-2,1.84747e-5
+unregistered PoWit,27 of 40,0.1,0.001,0.9501,reachable,9.95209e-4,1.00143e-3,1.84747e-5
+unregistered PoWit,27 of 40,0.2,0.01,,not reachable,,,1.94074e-2
+unregistered PoWit,27 of 40,0.2,0.001,,not reachable,,,1.94074e-2
+unregistered PoWit,27 of 40,0.25,0.01,,not reachable,,,1.03232e-1
+unregistered PoWit,27 of 40,0.25,0.001,,not reachable,,,1.03232e-1
+unregistered PoWit,27 of 40,0.33,0.01,,not reachable,,,4.52351e-1
+unregistered PoWit,27 of 40,0.33,0.001,,not reachable,,,4.52351e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.0,0.01,0.9075,reachable,9.97139e-3,1.00107e-2,0
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.0,0.001,0.9504,reachable,9.99033e-4,1.00663e-3,0
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.1,0.01,,not reachable,,,1.32437e-2
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.1,0.001,,not reachable,,,1.32437e-2
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.2,0.01,,not reachable,,,1.74577e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.2,0.001,,not reachable,,,1.74577e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.25,0.01,,not reachable,,,3.76657e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.25,0.001,,not reachable,,,3.76657e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.33,0.01,,not reachable,,,7.45872e-1
+"registered PoWit, SPEC (leader WC and subordinates)",7 of 10 and 21 of 30,0.33,0.001,,not reachable,,,7.45872e-1
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.0,0.01,0.815,reachable,9.97511e-3,1.00225e-2,0
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.0,0.001,0.8551,reachable,9.94520e-4,1.00143e-3,0
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.1,0.01,0.9055,reachable,9.99879e-3,1.00415e-2,1.84747e-5
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.1,0.001,0.9501,reachable,9.95209e-4,1.00143e-3,1.84747e-5
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.2,0.01,,not reachable,,,1.94074e-2
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.2,0.001,,not reachable,,,1.94074e-2
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.25,0.01,,not reachable,,,1.03232e-1
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.25,0.001,,not reachable,,,1.03232e-1
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.33,0.01,,not reachable,,,4.52351e-1
+"registered PoWit, single quorum ([P] validity rule, comparison)",27 of 40,0.33,0.001,,not reachable,,,4.52351e-1

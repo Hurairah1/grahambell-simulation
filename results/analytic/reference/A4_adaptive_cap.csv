@@ -1,0 +1,433 @@
+model,checkpoint_interval_fraction_of_t_min,safety_factor,attacker_share,threshold,outcome,time_in_t_min,worst_first_checkpoint_fraction_of_interval
+frozen,,,0.05,0.33,never reached,,
+continuous,,,0.05,0.33,never reached,,
+checkpoint aligned,0.25,,0.05,0.33,never reached,,
+checkpoint worst phase,0.25,,0.05,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.05,0.33,never reached,,
+checkpoint aligned,0.5,,0.05,0.33,never reached,,
+checkpoint worst phase,0.5,,0.05,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.05,0.33,never reached,,
+checkpoint aligned,1.0,,0.05,0.33,never reached,,
+checkpoint worst phase,1.0,,0.05,0.33,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.05,0.33,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.05,0.33,never reached,,
+frozen,,,0.05,0.51,never reached,,
+continuous,,,0.05,0.51,never reached,,
+checkpoint aligned,0.25,,0.05,0.51,never reached,,
+checkpoint worst phase,0.25,,0.05,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.05,0.51,never reached,,
+checkpoint aligned,0.5,,0.05,0.51,never reached,,
+checkpoint worst phase,0.5,,0.05,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.05,0.51,never reached,,
+checkpoint aligned,1.0,,0.05,0.51,never reached,,
+checkpoint worst phase,1.0,,0.05,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.05,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.05,0.51,never reached,,
+frozen,,,0.05,0.67,never reached,,
+continuous,,,0.05,0.67,never reached,,
+checkpoint aligned,0.25,,0.05,0.67,never reached,,
+checkpoint worst phase,0.25,,0.05,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.05,0.67,never reached,,
+checkpoint aligned,0.5,,0.05,0.67,never reached,,
+checkpoint worst phase,0.5,,0.05,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.05,0.67,never reached,,
+checkpoint aligned,1.0,,0.05,0.67,never reached,,
+checkpoint worst phase,1.0,,0.05,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.05,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.05,0.67,never reached,,
+frozen,,,0.1,0.33,never reached,,
+continuous,,,0.1,0.33,never reached,,
+checkpoint aligned,0.25,,0.1,0.33,never reached,,
+checkpoint worst phase,0.25,,0.1,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.1,0.33,never reached,,
+checkpoint aligned,0.5,,0.1,0.33,never reached,,
+checkpoint worst phase,0.5,,0.1,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.1,0.33,never reached,,
+checkpoint aligned,1.0,,0.1,0.33,never reached,,
+checkpoint worst phase,1.0,,0.1,0.33,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.1,0.33,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.1,0.33,never reached,,
+frozen,,,0.1,0.51,never reached,,
+continuous,,,0.1,0.51,never reached,,
+checkpoint aligned,0.25,,0.1,0.51,never reached,,
+checkpoint worst phase,0.25,,0.1,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.1,0.51,never reached,,
+checkpoint aligned,0.5,,0.1,0.51,never reached,,
+checkpoint worst phase,0.5,,0.1,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.1,0.51,never reached,,
+checkpoint aligned,1.0,,0.1,0.51,never reached,,
+checkpoint worst phase,1.0,,0.1,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.1,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.1,0.51,never reached,,
+frozen,,,0.1,0.67,never reached,,
+continuous,,,0.1,0.67,never reached,,
+checkpoint aligned,0.25,,0.1,0.67,never reached,,
+checkpoint worst phase,0.25,,0.1,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.1,0.67,never reached,,
+checkpoint aligned,0.5,,0.1,0.67,never reached,,
+checkpoint worst phase,0.5,,0.1,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.1,0.67,never reached,,
+checkpoint aligned,1.0,,0.1,0.67,never reached,,
+checkpoint worst phase,1.0,,0.1,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.1,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.1,0.67,never reached,,
+frozen,,,0.2,0.33,never reached,,
+continuous,,,0.2,0.33,never reached,,
+checkpoint aligned,0.25,,0.2,0.33,never reached,,
+checkpoint worst phase,0.25,,0.2,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.2,0.33,never reached,,
+checkpoint aligned,0.5,,0.2,0.33,never reached,,
+checkpoint worst phase,0.5,,0.2,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.2,0.33,never reached,,
+checkpoint aligned,1.0,,0.2,0.33,never reached,,
+checkpoint worst phase,1.0,,0.2,0.33,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.2,0.33,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.2,0.33,never reached,,
+frozen,,,0.2,0.51,never reached,,
+continuous,,,0.2,0.51,never reached,,
+checkpoint aligned,0.25,,0.2,0.51,never reached,,
+checkpoint worst phase,0.25,,0.2,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.2,0.51,never reached,,
+checkpoint aligned,0.5,,0.2,0.51,never reached,,
+checkpoint worst phase,0.5,,0.2,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.2,0.51,never reached,,
+checkpoint aligned,1.0,,0.2,0.51,never reached,,
+checkpoint worst phase,1.0,,0.2,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.2,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.2,0.51,never reached,,
+frozen,,,0.2,0.67,never reached,,
+continuous,,,0.2,0.67,never reached,,
+checkpoint aligned,0.25,,0.2,0.67,never reached,,
+checkpoint worst phase,0.25,,0.2,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.2,0.67,never reached,,
+checkpoint aligned,0.5,,0.2,0.67,never reached,,
+checkpoint worst phase,0.5,,0.2,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.2,0.67,never reached,,
+checkpoint aligned,1.0,,0.2,0.67,never reached,,
+checkpoint worst phase,1.0,,0.2,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.2,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.2,0.67,never reached,,
+frozen,,,0.25,0.33,never reached,,
+continuous,,,0.25,0.33,never reached,,
+checkpoint aligned,0.25,,0.25,0.33,never reached,,
+checkpoint worst phase,0.25,,0.25,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.25,0.33,never reached,,
+checkpoint aligned,0.5,,0.25,0.33,never reached,,
+checkpoint worst phase,0.5,,0.25,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.25,0.33,never reached,,
+checkpoint aligned,1.0,,0.25,0.33,never reached,,
+checkpoint worst phase,1.0,,0.25,0.33,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.25,0.33,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.25,0.33,never reached,,
+frozen,,,0.25,0.51,never reached,,
+continuous,,,0.25,0.51,never reached,,
+checkpoint aligned,0.25,,0.25,0.51,never reached,,
+checkpoint worst phase,0.25,,0.25,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.25,0.51,never reached,,
+checkpoint aligned,0.5,,0.25,0.51,never reached,,
+checkpoint worst phase,0.5,,0.25,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.25,0.51,never reached,,
+checkpoint aligned,1.0,,0.25,0.51,never reached,,
+checkpoint worst phase,1.0,,0.25,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.25,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.25,0.51,never reached,,
+frozen,,,0.25,0.67,never reached,,
+continuous,,,0.25,0.67,never reached,,
+checkpoint aligned,0.25,,0.25,0.67,never reached,,
+checkpoint worst phase,0.25,,0.25,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.25,0.67,never reached,,
+checkpoint aligned,0.5,,0.25,0.67,never reached,,
+checkpoint worst phase,0.5,,0.25,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.25,0.67,never reached,,
+checkpoint aligned,1.0,,0.25,0.67,never reached,,
+checkpoint worst phase,1.0,,0.25,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.25,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.25,0.67,never reached,,
+frozen,,,0.3,0.33,never reached,,
+continuous,,,0.3,0.33,never reached,,
+checkpoint aligned,0.25,,0.3,0.33,never reached,,
+checkpoint worst phase,0.25,,0.3,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.3,0.33,never reached,,
+checkpoint aligned,0.5,,0.3,0.33,never reached,,
+checkpoint worst phase,0.5,,0.3,0.33,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.3,0.33,never reached,,
+checkpoint aligned,1.0,,0.3,0.33,never reached,,
+checkpoint worst phase,1.0,,0.3,0.33,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.3,0.33,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.3,0.33,never reached,,
+frozen,,,0.3,0.51,never reached,,
+continuous,,,0.3,0.51,never reached,,
+checkpoint aligned,0.25,,0.3,0.51,never reached,,
+checkpoint worst phase,0.25,,0.3,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.3,0.51,never reached,,
+checkpoint aligned,0.5,,0.3,0.51,never reached,,
+checkpoint worst phase,0.5,,0.3,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.3,0.51,never reached,,
+checkpoint aligned,1.0,,0.3,0.51,never reached,,
+checkpoint worst phase,1.0,,0.3,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.3,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.3,0.51,never reached,,
+frozen,,,0.3,0.67,never reached,,
+continuous,,,0.3,0.67,never reached,,
+checkpoint aligned,0.25,,0.3,0.67,never reached,,
+checkpoint worst phase,0.25,,0.3,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.3,0.67,never reached,,
+checkpoint aligned,0.5,,0.3,0.67,never reached,,
+checkpoint worst phase,0.5,,0.3,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.3,0.67,never reached,,
+checkpoint aligned,1.0,,0.3,0.67,never reached,,
+checkpoint worst phase,1.0,,0.3,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.3,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.3,0.67,never reached,,
+frozen,,,0.34,0.33,reached,33.0,
+continuous,,,0.34,0.33,reached,3.5263605246161616,
+checkpoint aligned,0.25,,0.34,0.33,reached,3.946268651020288,
+checkpoint worst phase,0.25,,0.34,0.33,reached,3.937481337996087,0.37496267599217425
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.34,0.33,reached,4.986796268045374,0.4735925360907517
+checkpoint aligned,0.5,,0.34,0.33,reached,4.326627038561195,
+checkpoint worst phase,0.5,,0.34,0.33,reached,4.303585933766044,0.3035859337660445
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.34,0.33,reached,5.114447429698329,0.6144474296983284
+checkpoint aligned,1.0,,0.34,0.33,reached,5.0625,
+checkpoint worst phase,1.0,,0.34,0.33,reached,4.91547594742265,0.4577379737113252
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.34,0.33,reached,5.561362680573187,0.28068134028659325
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.34,0.33,reached,5.561362680573188,0.2806813402865933
+frozen,,,0.34,0.51,never reached,,
+continuous,,,0.34,0.51,never reached,,
+checkpoint aligned,0.25,,0.34,0.51,never reached,,
+checkpoint worst phase,0.25,,0.34,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.34,0.51,never reached,,
+checkpoint aligned,0.5,,0.34,0.51,never reached,,
+checkpoint worst phase,0.5,,0.34,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.34,0.51,never reached,,
+checkpoint aligned,1.0,,0.34,0.51,never reached,,
+checkpoint worst phase,1.0,,0.34,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.34,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.34,0.51,never reached,,
+frozen,,,0.34,0.67,never reached,,
+continuous,,,0.34,0.67,never reached,,
+checkpoint aligned,0.25,,0.34,0.67,never reached,,
+checkpoint worst phase,0.25,,0.34,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.34,0.67,never reached,,
+checkpoint aligned,0.5,,0.34,0.67,never reached,,
+checkpoint worst phase,0.5,,0.34,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.34,0.67,never reached,,
+checkpoint aligned,1.0,,0.34,0.67,never reached,,
+checkpoint worst phase,1.0,,0.34,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.34,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.34,0.67,never reached,,
+frozen,,,0.4,0.33,reached,4.714285714285714,
+continuous,,,0.4,0.33,reached,1.742969305058623,
+checkpoint aligned,0.25,,0.4,0.33,reached,1.9483725714285713,
+checkpoint worst phase,0.25,,0.4,0.33,reached,1.9394040937465806,0.3788081874931617
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.4,0.33,reached,2.459436883058535,0.4188737661170717
+checkpoint aligned,0.5,,0.4,0.33,reached,2.128747795414462,
+checkpoint worst phase,0.5,,0.4,0.33,reached,2.1024001945294217,0.6024001945294217
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.4,0.33,reached,2.5048344250790366,0.5048344250790369
+checkpoint aligned,1.0,,0.4,0.33,reached,2.4285714285714284,
+checkpoint worst phase,1.0,,0.4,0.33,reached,2.3806170189140663,0.6903085094570331
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.4,0.33,reached,2.670061633712066,0.33503081685603314
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.4,0.33,reached,2.670061633712066,0.3350308168560332
+frozen,,,0.4,0.51,never reached,,
+continuous,,,0.4,0.51,never reached,,
+checkpoint aligned,0.25,,0.4,0.51,never reached,,
+checkpoint worst phase,0.25,,0.4,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.4,0.51,never reached,,
+checkpoint aligned,0.5,,0.4,0.51,never reached,,
+checkpoint worst phase,0.5,,0.4,0.51,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.4,0.51,never reached,,
+checkpoint aligned,1.0,,0.4,0.51,never reached,,
+checkpoint worst phase,1.0,,0.4,0.51,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.4,0.51,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.4,0.51,never reached,,
+frozen,,,0.4,0.67,never reached,,
+continuous,,,0.4,0.67,never reached,,
+checkpoint aligned,0.25,,0.4,0.67,never reached,,
+checkpoint worst phase,0.25,,0.4,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.4,0.67,never reached,,
+checkpoint aligned,0.5,,0.4,0.67,never reached,,
+checkpoint worst phase,0.5,,0.4,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.4,0.67,never reached,,
+checkpoint aligned,1.0,,0.4,0.67,never reached,,
+checkpoint worst phase,1.0,,0.4,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.4,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.4,0.67,never reached,,
+frozen,,,0.52,0.33,reached,1.736842105263158,
+continuous,,,0.52,0.33,reached,1.0068047394149868,
+checkpoint aligned,0.25,,0.52,0.33,reached,1.1210105263157895,
+checkpoint worst phase,0.25,,0.52,0.33,reached,1.1174992358138045,0.734998471627609
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.52,0.33,reached,1.4169256598623745,0.33385131972475013
+checkpoint aligned,0.5,,0.52,0.33,reached,1.2163742690058479,
+checkpoint worst phase,0.5,,0.52,0.33,reached,1.2015265340238819,0.7015265340238819
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.52,0.33,reached,1.4290571074788896,0.4290571074788898
+checkpoint aligned,1.0,,0.52,0.33,reached,1.368421052631579,
+checkpoint worst phase,1.0,,0.52,0.33,reached,1.3086807674740446,0.6543403837370223
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.52,0.33,reached,1.4992259004454582,0.24961295022272917
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.52,0.33,reached,1.4992259004454584,0.2496129502227292
+frozen,,,0.52,0.51,reached,51.0,
+continuous,,,0.52,0.51,reached,3.9512437185814275,
+checkpoint aligned,0.25,,0.52,0.51,reached,4.420935903116329,
+checkpoint worst phase,0.25,,0.52,0.51,reached,4.414195835054055,0.32839167010810844
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.52,0.51,reached,5.590619934177116,0.6812398683542384
+checkpoint aligned,0.5,,0.52,0.51,reached,4.852639333434944,
+checkpoint worst phase,0.5,,0.52,0.51,reached,4.826060475082231,0.32606047508223135
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.52,0.51,reached,5.7415795533648,0.24157955336479991
+checkpoint aligned,1.0,,0.52,0.51,reached,5.625,
+checkpoint worst phase,1.0,,0.52,0.51,reached,5.549509756796392,0.2747548783981961
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.52,0.51,reached,6.246519525424672,0.623259762712336
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.52,0.51,reached,6.246519525424673,0.6232597627123361
+frozen,,,0.52,0.67,never reached,,
+continuous,,,0.52,0.67,never reached,,
+checkpoint aligned,0.25,,0.52,0.67,never reached,,
+checkpoint worst phase,0.25,,0.52,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.52,0.67,never reached,,
+checkpoint aligned,0.5,,0.52,0.67,never reached,,
+checkpoint worst phase,0.5,,0.52,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.52,0.67,never reached,,
+checkpoint aligned,1.0,,0.52,0.67,never reached,,
+checkpoint worst phase,1.0,,0.52,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.52,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.52,0.67,never reached,,
+frozen,,,0.55,0.33,reached,1.5,
+continuous,,,0.55,0.33,reached,0.9162907318741551,
+checkpoint aligned,0.25,,0.55,0.33,reached,1.024,
+checkpoint worst phase,0.25,,0.55,0.33,reached,1.0127416997969523,0.5254833995939041
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.55,0.33,reached,1.287971203597978,0.5759424071959565
+checkpoint aligned,0.5,,0.55,0.33,reached,1.1111111111111112,
+checkpoint worst phase,0.5,,0.55,0.33,reached,1.0819888974716112,0.5819888974716112
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.55,0.33,reached,1.301600141395877,0.3016001413958768
+checkpoint aligned,1.0,,0.55,0.33,reached,1.25,
+checkpoint worst phase,1.0,,0.55,0.33,reached,1.1622776601683793,0.5811388300841898
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.55,0.33,reached,1.3559906035297757,0.677995301764888
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.55,0.33,reached,1.355990603529776,0.6779953017648881
+frozen,,,0.55,0.51,reached,12.75,
+continuous,,,0.55,0.51,reached,2.6210388241125804,
+checkpoint aligned,0.25,,0.55,0.51,reached,2.9311160064,
+checkpoint worst phase,0.25,,0.55,0.51,reached,2.923583222607315,0.34716644521462925
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.55,0.51,reached,3.7039699869669973,0.4079399739339975
+checkpoint aligned,0.5,,0.55,0.51,reached,3.207133058984911,
+checkpoint worst phase,0.5,,0.55,0.51,reached,3.1912447591977706,0.6912447591977702
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.55,0.51,reached,3.793588371123685,0.2935883711236852
+checkpoint aligned,1.0,,0.55,0.51,reached,3.71875,
+checkpoint worst phase,1.0,,0.55,0.51,reached,3.622022120425379,0.3110110602126894
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.55,0.51,reached,4.085360164242113,0.5426800821210565
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.55,0.51,reached,4.085360164242114,0.5426800821210566
+frozen,,,0.55,0.67,never reached,,
+continuous,,,0.55,0.67,never reached,,
+checkpoint aligned,0.25,,0.55,0.67,never reached,,
+checkpoint worst phase,0.25,,0.55,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.55,0.67,never reached,,
+checkpoint aligned,0.5,,0.55,0.67,never reached,,
+checkpoint worst phase,0.5,,0.55,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.55,0.67,never reached,,
+checkpoint aligned,1.0,,0.55,0.67,never reached,,
+checkpoint worst phase,1.0,,0.55,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.55,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.55,0.67,never reached,,
+frozen,,,0.6,0.33,reached,1.2222222222222223,
+continuous,,,0.6,0.33,reached,0.7985076962177716,
+checkpoint aligned,0.25,,0.6,0.33,reached,0.8877777777777778,
+checkpoint worst phase,0.25,,0.6,0.33,reached,0.8833333333333335,0.2666666666666666
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.6,0.33,reached,1.1232692426136517,0.24653848522730393
+checkpoint aligned,0.5,,0.6,0.33,reached,0.9814814814814815,
+checkpoint worst phase,0.5,,0.6,0.33,reached,0.9343224778007384,0.4343224778007384
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.6,0.33,reached,1.1283830902997494,0.6283830902997497
+checkpoint aligned,1.0,,0.6,0.33,reached,1.1111111111111112,
+checkpoint worst phase,1.0,,0.6,0.33,reached,0.9814239699997196,0.4907119849998598
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.6,0.33,reached,1.1449946316663393,0.5724973158331697
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.6,0.33,reached,1.1449946316663395,0.5724973158331698
+frozen,,,0.6,0.51,reached,5.666666666666667,
+continuous,,,0.6,0.51,reached,1.8971199848858813,
+checkpoint aligned,0.25,,0.6,0.51,reached,2.1184810666666665,
+checkpoint worst phase,0.25,,0.6,0.51,reached,2.1148267026007073,0.7296534052014145
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.6,0.51,reached,2.6784523231225053,0.35690464624501306
+checkpoint aligned,0.5,,0.6,0.51,reached,2.316872427983539,
+checkpoint worst phase,0.5,,0.6,0.51,reached,2.2951012421969876,0.29510124219698763
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.6,0.51,reached,2.7396527335169627,0.2396527335169625
+checkpoint aligned,1.0,,0.6,0.51,reached,2.6666666666666665,
+checkpoint worst phase,1.0,,0.6,0.51,reached,2.581988897471611,0.2909944487358056
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.6,0.51,reached,2.9107039993874086,0.45535199969370443
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.6,0.51,reached,2.910703999387409,0.4553519996937045
+frozen,,,0.6,0.67,never reached,,
+continuous,,,0.6,0.67,never reached,,
+checkpoint aligned,0.25,,0.6,0.67,never reached,,
+checkpoint worst phase,0.25,,0.6,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.6,0.67,never reached,,
+checkpoint aligned,0.5,,0.6,0.67,never reached,,
+checkpoint worst phase,0.5,,0.6,0.67,never reached,,
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.6,0.67,never reached,,
+checkpoint aligned,1.0,,0.6,0.67,never reached,,
+checkpoint worst phase,1.0,,0.6,0.67,never reached,,
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.6,0.67,never reached,,
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.6,0.67,never reached,,
+frozen,,,0.75,0.33,reached,0.7857142857142857,
+continuous,,,0.75,0.33,reached,0.5798184952529422,
+checkpoint aligned,0.25,,0.75,0.33,reached,0.6428571428571429,
+checkpoint worst phase,0.25,,0.75,0.33,reached,0.6380899352993952,0.27617987059879034
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.75,0.33,reached,0.8115645741080576,0.6231291482161154
+checkpoint aligned,0.5,,0.75,0.33,reached,0.6904761904761905,
+checkpoint worst phase,0.5,,0.75,0.33,reached,0.672612419124244,0.6726124191242437
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.75,0.33,reached,0.8093790171119488,0.3093790171119487
+checkpoint aligned,1.0,,0.75,0.33,reached,0.7857142857142857,
+checkpoint worst phase,1.0,,0.75,0.33,reached,0.672612419124244,0.33630620956212187
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.75,0.33,reached,0.7847144889782846,0.3923572444891421
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.75,0.33,reached,0.7847144889782847,0.3923572444891422
+frozen,,,0.75,0.51,reached,2.125,
+continuous,,,0.75,0.51,reached,1.1394342831883648,
+checkpoint aligned,0.25,,0.75,0.51,reached,1.274,
+checkpoint worst phase,0.25,,0.75,0.51,reached,1.2627416997969523,0.5254833995939041
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.75,0.51,reached,1.6060783135818946,0.7121566271637899
+checkpoint aligned,0.5,,0.75,0.51,reached,1.3888888888888888,
+checkpoint worst phase,0.5,,0.75,0.51,reached,1.3570226039551585,0.3570226039551585
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.75,0.51,reached,1.6265530029313475,0.6265530029313479
+checkpoint aligned,1.0,,0.75,0.51,reached,1.5625,
+checkpoint worst phase,1.0,,0.75,0.51,reached,1.5,0.25
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.75,0.51,reached,1.6934347096994964,0.3467173548497483
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.75,0.51,reached,1.6934347096994966,0.34671735484974836
+frozen,,,0.75,0.67,reached,8.375,
+continuous,,,0.75,0.67,reached,2.2380465718564744,
+checkpoint aligned,0.25,,0.75,0.67,reached,2.50663296,
+checkpoint worst phase,0.25,,0.75,0.67,reached,2.4934715955411604,0.48694319108232076
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,0.75,0.67,reached,3.162067336369409,0.32413467273882085
+checkpoint aligned,0.5,,0.75,0.67,reached,2.734567901234568,
+checkpoint worst phase,0.5,,0.75,0.67,reached,2.721655269759087,0.7216552697590868
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,0.75,0.67,reached,3.238053636505361,0.23805363650536143
+checkpoint aligned,1.0,,0.75,0.67,reached,3.171875,
+checkpoint worst phase,1.0,,0.75,0.67,reached,3.0618621784789726,0.5309310892394863
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,0.75,0.67,reached,3.489559915344419,0.2447799576722096
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,0.75,0.67,reached,3.4895599153444192,0.24477995767220967
+frozen,,,1.0,0.33,reached,0.4925373134328358,
+continuous,,,1.0,0.33,reached,0.40047756659712536,
+checkpoint aligned,0.25,,1.0,0.33,reached,0.44402985074626866,
+checkpoint worst phase,0.25,,1.0,0.33,reached,0.4354334588326122,0.37086691766522417
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,1.0,0.33,reached,0.5572914476642823,0.6145828953285646
+checkpoint aligned,0.5,,1.0,0.33,reached,0.4925373134328358,
+checkpoint worst phase,0.5,,1.0,0.33,reached,0.4433888871261046,0.4433888871261047
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,1.0,0.33,reached,0.5434716643687821,0.5434716643687822
+checkpoint aligned,1.0,,1.0,0.33,reached,0.4925373134328358,
+checkpoint worst phase,1.0,,1.0,0.33,reached,0.4433888871261046,0.22169444356305235
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,1.0,0.33,reached,0.5172870349804553,0.2586435174902277
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,1.0,0.33,reached,0.5172870349804554,0.25864351749022774
+frozen,,,1.0,0.51,reached,1.0408163265306123,
+continuous,,,1.0,0.51,reached,0.7133498878774648,
+checkpoint aligned,0.25,,1.0,0.51,reached,0.7948979591836735,
+checkpoint worst phase,0.25,,1.0,0.51,reached,0.7857142857142857,0.5714285714285721
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,1.0,0.51,reached,1.0,0.5000000000000014
+checkpoint aligned,0.5,,1.0,0.51,reached,0.8605442176870748,
+checkpoint worst phase,0.5,,1.0,0.51,reached,0.8328473740792172,0.33284737407921705
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,1.0,0.51,reached,1.0,0.5000000000000002
+checkpoint aligned,1.0,,1.0,0.51,reached,1.0204081632653061,
+checkpoint worst phase,1.0,,1.0,0.51,reached,0.8571428571428572,0.4285714285714286
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,1.0,0.51,reached,1.0,0.5
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,1.0,0.51,reached,1.0000000000000002,0.5000000000000001
+frozen,,,1.0,0.67,reached,2.0303030303030303,
+continuous,,,1.0,0.67,reached,1.1086626245216111,
+checkpoint aligned,0.25,,1.0,0.67,reached,1.2412121212121212,
+checkpoint worst phase,0.25,,1.0,0.67,reached,1.2281939962329325,0.4563879924658645
+checkpoint worst phase with safety factor k,0.25,1.2959444635509159,1.0,0.67,reached,1.5610685370100827,0.6221370740201665
+checkpoint aligned,0.5,,1.0,0.67,reached,1.3468013468013469,
+checkpoint worst phase,0.5,,1.0,0.67,reached,1.321035412742638,0.321035412742638
+checkpoint worst phase with safety factor k,0.5,1.2257223402493913,1.0,0.67,reached,1.5795579121759928,0.5795579121759925
+checkpoint aligned,1.0,,1.0,0.67,reached,1.5151515151515151,
+checkpoint worst phase,1.0,,1.0,0.67,reached,1.4618298195866546,0.2309149097933274
+checkpoint worst phase with safety factor k,1.0,1.1666666666666665,1.0,0.67,reached,1.6472217967907317,0.32361089839536583
+configured cap (SPEC §3.9 default),1.0,1.1666666666666667,1.0,0.67,reached,1.6472217967907319,0.3236108983953659
