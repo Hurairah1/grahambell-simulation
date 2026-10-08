@@ -1,9 +1,9 @@
-# Modelling assumptions — M1 analytical baseline
+# Modelling assumptions — M1 analytical baseline and M2 protocol core
 
-SPEC §11.5 requires every modelling assumption to be listed with its source. This file covers milestone M1 and its updates M1.1 and M1.2 (`crates/gb-analytic`).
+SPEC §11.5 requires every modelling assumption to be listed with its source. This file covers milestone M1 and its updates M1.1 and M1.2 (`crates/gb-analytic`), and M2 (`crates/gb-protocol`, section P; `crates/gb-crypto-tests`, section K).
 
 - Each entry has an identifier, the assumption, its source, and the later milestone that tests it.
-- "Architect, 2026-10-05" refers to the decisions recorded in the SPEC v0.2 changelog; "architect, 2026-10-06" to those in the SPEC v0.3 changelog; "architect, 2026-10-07" to those in the SPEC v0.4 changelog and the M1.2 plan.
+- "Architect, 2026-10-05" refers to the decisions recorded in the SPEC v0.2 changelog; "architect, 2026-10-06" to those in the SPEC v0.3 changelog; "architect, 2026-10-07" to those in the SPEC v0.4 changelog and the M1.2 plan; "architect, 2026-10-08" to the SPEC v0.5 changelog and the M2 plan.
 - Section letters match the tables in `results/analytic/<run>/`.
 
 ## General
@@ -144,6 +144,36 @@ Identifiers use the prefix QF to avoid a clash with the SPEC hypotheses H1–H9.
 | KS-8 | **(b) A member that disappears without announcing it still counts as online.** Under option 2 online status comes from the network record, so its KWCs' entropy waits for its signature until One Chance fails and the proposer records it offline, about one grace epoch. M3 and M4 measure how often this stalls KWCs. One Chance is the intended mechanism; M3 and M4 sweep the wait over 1, 2 and 5 rounds. | Architect, 2026-10-07 (addendum; M1.2 answer Q4); SPEC §3.4, §4.5 | M3, M4 |
 | KS-9 | **Household limits** (router connection tables, upload bandwidth) are not modelled; M5 measures them. Section I does not pick a size. M2 and M5 benchmark k = 4 and 6 (primary) and k = 3 and 10 (edges). | Architect, 2026-10-07 (addendum; M1.2 answer Q5) | M2, M5 |
 
+## P. Protocol core (`gb-protocol`)
+
+| ID | Assumption | Source | Tested in |
+|---|---|---|---|
+| P-1 | **Byte layouts** follow SPEC v0.5 Appendix A [P]: big-endian fixed widths, domain-tagged SHA-256, the canonical 173-byte header with an address type, the signer bitfield in seat order. `vectors/protocol_v1.json` pins every output; a test requires the committed file to equal a fresh rendering. | Architect, 2026-10-08 (byte formats, address type) | M3, Stage 3 node |
+| P-2 | **BLS:** `blst` only, min-pk (keys in G1, signatures in G2), ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`. Keys are validated (subgroup check) whenever parsed. A KWC's keys are accepted only with valid proofs of possession (`KwcKeys::new`), which makes aggregating different members' keys safe. The protocol core contains no hand-written cryptographic arithmetic. | Architect, 2026-10-08 (BLS variant; amendment 2) | M2 tests |
+| P-3 | **Equivocation** ("two headers signed by the same miner key in the same round", SPEC §3.4) is read as two different headers at the same height, both validly signed by the same candidate key. | Reasoning; SPEC §3.4 | M2 C1(d) |
+| P-4 | **Signing condition** (SPEC §3.6): a member signs the PoWit when its own clock is at least `t0 + N − δ`. | SPEC §3.6 | M3, M4 |
+| P-5 | **Validation** checks rules in a fixed order and reports the first failure: tip and serialisation, uniqueness, entropy signers meeting the quorum, the entropy aggregate, the full chain (N must be the first winning step), `timestamp = t0 + N`, reception no earlier than the timestamp minus δ, the PoWit quorum and aggregate, and the PoWit deadline D when set. "Online members must number at least the quorum" (§3.4) is read as the entropy signers meeting the miner kind's quorum rule. A validator cannot see who was online, so "every online member signed" is enforced by One Chance, not by validation. | Reasoning; SPEC §3.4, §3.7 | M3, M4 |
+| P-6 | **Uniqueness** of the candidate key and address is a predicate the caller supplies from chain state. | Reasoning | M3 |
+| P-7 | **Adaptive interval:** the larger of the interval demand asks for and `k × T_min / registered IDs` at the last checkpoint. | SPEC §3.9 | M3 (S7) |
+| P-8 | **Committee refresh:** the regular draw joins first; the oldest member leaves when members plus seats awaiting extra draws exceed the size; extra draws `i = 1, 2, …` follow. While the committee is filling, nobody leaves. | SPEC §4.3; reasoning | M4 (S21) |
+| P-9 | **IDs** are block hashes, `SHA256("GB/block" ‖ header ‖ E ‖ N)` (Appendix A). | Architect, 2026-10-08 | — |
+
+## K. Cryptography measurements (`gb-crypto-tests`, `gb crypto`)
+
+| ID | Assumption | Source | Tested in |
+|---|---|---|---|
+| K-1 | **Test difficulty:** each step wins with probability 1/64, so trials are fast. For independent candidate entropies the advantage is `E / (1/(1 − (1 − 1/E)^G))`, which depends little on E; each row reports this formula next to the measured value. | Reasoning | — |
+| K-2 | **Non-unique signature stand-in (C1 a, c):** a BLS signature over the message and a free nonce represents a randomised signature scheme, in which every new nonce gives another valid signature and so another entropy. | Reasoning; SPEC §8 S11 | — |
+| K-3 | **Group size in C1:** 10 members; the subset experiment (b) uses a quorum of 7. The advantage depends on the number of distinct entropies the attacker can choose from, not on the group size. | Reasoning | — |
+| K-4 | **C1(c′):** a colluding member's choice to withhold is measured as if free, to size the lever. Under SPEC §4.5 withholding while online triggers One Chance and then a penalty. | SPEC §4.5 | M4 |
+| K-5 | **C1(e):** the full current flow is re-signed G times on the first 20 trials to confirm that it yields one entropy; later trials compute it once. The honest comparison uses an independent stream of trials. | Reasoning | — |
+| K-6 | **Beacon withholding (C3):** the attacker mines each candidate beacon block independently with probability s and withholds it when the outcome is unfavourable, giving up that block; a block mined by someone else is final. For the committee lottery the attacker's share of PoW-Tx blocks equals its share of active IDs, and committee membership is ignored (the next-position rule rarely applies when n ≪ N). | Reasoning; SPEC §4.2–§4.3 | M4 |
+| K-7 | **Placement grinding (C3):** the allocation beacon does not exist when an ID is minted (it is 6 blocks after confirmation), so the experiment applies a selection rule at minting and checks that kept IDs land in the target seats at the target rate. | SPEC §4.2 | — |
+| K-8 | **Timings (C4, C5):** single-threaded on the machine named in `bench/BENCH.md`, release build. Verification times include parsing and validating keys from bytes; a node that caches parsed keys would be faster. | Reasoning | M5 (S27) |
+| K-9 | **§13 witness-server estimate (C4):** per miner and witness every round: one miner-signature verify, one entropy signature, one entropy-aggregate verify, and one SHA-256 chain step per second of the round; 3 witnesses per server; 30 s rounds. PoWit signing, networking, serialisation and storage are not counted. | Architect, 2026-10-08 (§13); reasoning | M5, Stage 3 staging |
+| K-10 | **Threshold BLS prototype (C5): benchmark only, not audited, not used by `gb-protocol`.** Joint-Feldman DKG with honest dealers (no complaint round), t = ⌈2n/3⌉. Shares are counted at 32 bytes without encryption overhead, and commitment broadcasts once per sender. Group arithmetic uses the `bls12_381` crate; signing and verification use `blst`. | Architect, 2026-10-08 (threshold, amendment 2) | M4 decision |
+| K-11 | **Entropy stand-in for M3 (C6):** 32 uniform random bytes in place of the real BLS-derived entropy. It passes when a two-sample χ² on the winning-step distribution (10 bins, edges at 1/8 to 4 times the expected attempts) and KS tests on the top 53 bits of E all give p ≥ 0.001. | Architect, 2026-10-08 (C6) | M3 |
+
 ---
 
 ## Questions for the architect
@@ -168,7 +198,20 @@ Identifiers use the prefix QF to avoid a clash with the SPEC hypotheses H1–H9.
    - primary: k = 4 (40 members, the protocol default) and k = 6 (60 members, the smallest size at which two-thirds stays under 1% failing at p = 20%);
    - edges: k = 3 (30 members) and k = 10 (100 members).
 
-**Open questions:** none.
+**Open questions raised by M2:**
+
+1. **Pre-registered thresholds for H1–H9 (SPEC §10).** Proposals, for you to confirm or change before M3 generates results:
+   - **H1 linearity:** keep: the amplification factor's 95% CI lies within [0.95, 1.05] for every strategy in S1–S4. M1 shows proportionality holds exactly in expectation; ±5% leaves room for Tier 1 sample noise.
+   - **H2 time floor:** keep ±5% of `(0.51/0.49) × H_active / R`. M1's closed form differs from block-by-block outcomes by less than one block.
+   - **H3 no grinding:** tighten to "the advantage's 95% CI includes 1 and its upper end is at most 1.02, with at least 10,000 trials under S11(e)". M2 measured 1.012 (0.933–1.091) with 1,000 trials, and the current flow yields exactly one entropy, so a measurable gain would point to a bug.
+   - **H4 restart:** tighten from 1.05 to 1.02. Per-round entropy makes the advantage exactly 1 analytically (M1 section D); only simulation noise remains.
+   - **H5 hopping:** keep ≤ 2% for Variant B, and require the same of whatever correction M3 proposes.
+   - **H6 witness capture:** fewer than 1 expected distinct sign-alone episode over 10 years at p ≤ 25% and 100,000 KWCs, for the unregistered quorum, under the v0.4 seat rule with L = 30 days and M3's household profiles. M1 gives 0.476 with no absences and 0.821 with 4 absences per year, so this passes narrowly and is a meaningful test.
+   - **H7 attrition:** at most 1% of IDs lost per year without misbehaviour, under both M3 regional profiles (reliable and unreliable grid).
+   - **H8 griefing:** zero griefing bans of honest witnesses under the [P] "unreachable is not refusal" rule; report the cost per victim under the strict rule.
+   - **H9 cost:** reported without a threshold, at 1M and 10M honest active IDs.
+2. **The online set as a grinding lever.** C1(c′) shows that a member able to choose between signing and withholding without cost gives the miner two entropies (advantage 1.88 measured, 1.98 for independent tries). More generally, c such members give up to 2^c. SPEC §4.5 makes withholding while online costly (One Chance, then a penalty), but an unannounced disappearance is treated as online until One Chance fails. Should M4 measure this lever explicitly, for example with colluding members timing offline requests?
+3. **Witness-server CPU for §13.** On this 2019 laptop CPU (Intel i5-8257U), 30,000 miners need about 12 cores busy, dominated by verifying each miner's entropy aggregate (about 2.4 ms with key parsing). Is per-miner entropy verification by every witness required, given that each witness helped build that entropy? Dropping it would roughly halve the load.
 
 ## Observations about the SPEC
 

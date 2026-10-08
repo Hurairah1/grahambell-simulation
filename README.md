@@ -12,7 +12,8 @@ GrahamBell is a proposed Layer 1 blockchain whose Sybil resistance comes from ti
 | M1 | done | **Analytical baseline**: exact formulas and exact probabilities for issuance, witness capture, the allocation committee, the restart attack, difficulty hopping and same-step ties |
 | M1.1 | done | The architect's decisions on M1 (SPEC v0.3): 2.9M genesis IDs, adaptive-cap safety factor, count-based difficulty, committee seat lottery, adopted allocation algorithm, deactivation instead of bans. Adds the quorum trade-off (section G) and a [public brief](docs/M1_PUBLIC_BRIEF.md) |
 | M1.2 | done | The architect's decisions on M1.1 (SPEC v0.4): seats survive downtime (only bans and absences longer than L vacate them), distinct episodes as the H6 measure, placement without the committee, committee departures, conflicting decisions and proposer rights. Adds quorum feasibility under honest downtime (section H), the KWC size trade-off (section I) and the Apache 2.0 licence |
-| M2–M6 | planned | Cryptographic core, simulators, cost model, full-scale runs; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| M2 | done | SPEC v0.5 (M1.2 answers, PoWit arrival deadline, Stage 3 testnet decisions, wire formats). The shared protocol core `gb-protocol` with test vectors, and `gb-crypto-tests`: grinding, sorted-hash ambiguity, beacon withholding, placement grinding, benchmarks, a threshold-BLS prototype and the simulator's entropy stand-in, all with real SHA-256 and BLS12-381 |
+| M3–M6 | planned | Simulators, cost model, full-scale runs; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 
 M1 results are the ground truth that later simulators must reproduce before their own results are trusted. Every modelling assumption behind them is listed in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).
 
@@ -55,6 +56,16 @@ Options:
 | `--seed N` | Master seed for the Monte Carlo cross-checks (default 20261005) |
 | `--out DIR` | Where run directories go (default `results/analytic`) |
 | `--allow-dirty` | Allow uncommitted changes (recorded in `run.json`) |
+
+## Run the M2 measurements
+
+```sh
+cargo run --release -p gb-cli -- crypto        # tables, SUMMARY.md and run.json in results/crypto/<run-id>/
+cargo bench -p gb-crypto-tests                 # criterion benchmarks of the same operations
+cargo run --release -p gb-cli -- vectors       # rewrite crates/gb-protocol/vectors/protocol_v1.json
+```
+
+`gb crypto` takes the same options as `gb analytic` and also refuses a dirty working tree. It takes a few minutes. Its tables (`K1_…` to `K6_….csv`), `validation.csv` and `SUMMARY.md` are reproducible from the commit, seed and configuration. Timings depend on the machine, so they go to `bench/` (with the machine described in `bench/BENCH.md`) and are left out of reproducibility checks. The test vectors are checked by `cargo test`; regenerate them only when SPEC Appendix A changes.
 
 ## Where each output lives
 
@@ -128,6 +139,8 @@ Unknown keys are rejected. A file cannot change a status tag, because status tag
 | `crates/gb-config` | Typed configuration and the SPEC §2 parameter registry |
 | `crates/gb-runlog` | Run provenance: run ids, git commit, seed, output checksums, seeded random streams |
 | `crates/gb-analytic` | M1 analytical baseline: exact formulas, exact probabilities, cross-checks |
+| `crates/gb-protocol` | M2 protocol core: header encoding, entropy and BLS, hash chain, validation, difficulty and issuance, allocation, committee lottery; test vectors in `vectors/` |
+| `crates/gb-crypto-tests` | M2 measurements with real cryptography, and criterion benchmarks in `benches/` |
 | `crates/gb-cli` | The `gb` command-line tool: tables, charts, summary |
 | `results/` | Generated outputs; only the reference run in `results/analytic/reference/` is committed |
 

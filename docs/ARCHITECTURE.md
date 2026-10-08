@@ -18,17 +18,17 @@ This document describes how the Stage 1 code is organised, how later milestones 
 
 | Crate | Status | Milestone | Responsibility |
 |---|---|---|---|
-| `gb-config` | exists | M0 | Typed parameters for every SPEC §2 row (value, status D/P/O, sweep), M1 grids, run settings; TOML loading by deep merge over defaults. |
+| `gb-config` | exists | M0 | Typed parameters for every SPEC §2 row (value, status D/P/O, sweep), M1 grids, M2 measurement settings, run settings; TOML loading by deep merge over defaults. |
 | `gb-runlog` | exists | M0 | Run id, git commit and dirty flag, UTC timestamp, resolved-config hash, SHA-256 manifest of outputs, seeded ChaCha20 streams. |
 | `gb-analytic` | exists | M1 | Exact closed forms and exact probabilities (sections A–I), with independent cross-checks. Pure functions; no I/O. |
-| `gb-cli` | exists | M0+ | Binary `gb`: loads config, runs analyses, writes CSV/PNG/SUMMARY, the public brief and the run log. Front end only; never recomputes results. |
-| `gb-protocol` | planned | M2 | Shared protocol core, listed in section 5. |
-| `gb-crypto-tests` | planned | M2 | Micro-tests with real SHA-256 and BLS12-381: S11 grinding, S14, proof of possession, equivocation, and equivalence tests for any abstraction a simulator uses. |
+| `gb-cli` | exists | M0+ | Binary `gb`: `analytic`, `crypto`, `vectors`, `params`, `config`. Writes CSV/PNG/SUMMARY, the public brief and the run log. Front end only; never recomputes results. |
+| `gb-protocol` | exists | M2 | Shared protocol core (section 5): pure functions over `blst` and SHA-256, with test vectors in `vectors/`. |
+| `gb-crypto-tests` | exists | M2 | Measurements with real SHA-256 and BLS12-381: S11 grinding, S14, equivocation, beacon withholding, placement grinding, timings, the threshold-BLS prototype (benchmark only), and the equivalence of the simulator's entropy stand-in. |
 | `gb-sim` | planned | M3, M4 | Tier 1 discrete-event simulator. |
 | `gb-scale` | planned | M6 | Tier 2 aggregate model at full scale. |
 | `gb-bench` | planned | M5 | S27 hardware benchmark and S28 money-cost model. |
 
-Dependencies point one way: `gb-cli` → analysis crates (`gb-analytic`, `gb-sim`, `gb-scale`, `gb-bench`) → `gb-protocol`, `gb-config`, `gb-runlog`. No analysis crate depends on `gb-cli`.
+Dependencies point one way: `gb-cli` → analysis crates (`gb-analytic`, `gb-crypto-tests`, `gb-sim`, `gb-scale`, `gb-bench`) → `gb-protocol`, `gb-config`, `gb-runlog`. No analysis crate depends on `gb-cli`. `gb-protocol` uses `gb-analytic` only in its tests, to reproduce M1's ring and composition rates.
 
 ## 3. The two tiers
 
@@ -70,6 +70,13 @@ Each M1 table becomes a check that a later simulator must pass.
 | F1 same-step tie rate | M3 fork/orphan rate |
 | G1–G3 quorum trade-off (stall, sign alone, conflicting approvals) | M4 S15–S21 under whichever quorums the architect chooses; conflicting approvals also need the proposer rules |
 | G4 ten-year episodes under each seat rule | M4 with M3 household downtime profiles |
+| M2 `gb-protocol` test vectors (`vectors/protocol_v1.json`) | the M3 simulator and the Stage 3 node reproduce every hash, signature and verdict |
+| M2 allocation reproduces M1's 4.7 and 4.6 compositions per insertion and removal | M4 allocation simulation (S15) |
+| M2 C1 grinding advantages (old flows grow with G; current flow 1) | M3 S11/H3 under network timing |
+| M2 C3 beacon withholding `q / (1 − s(1 − q))` | M4 with real block timing and beacon offsets |
+| M2 C4 timings and the §13 server estimate | M5 S27 hardware benchmark; Stage 3 staging run |
+| M2 C5 threshold-BLS setup cost | the M4 decision on SPEC §12 [P] threshold entropy |
+| M2 C6 entropy stand-in equivalence | M3 may use the stand-in only while this check passes |
 | H1–H3 quorum feasibility under honest downtime, minimum uptime, absent seats per L | M3 household profiles (H7), M4 with the forced-signing and ban rules (§4.5–§4.6) |
 | I1–I4 KWC size trade-off: security, liveness, load, on-demand connections | M2 threshold BLS key setup at each size, M4, M5 household limits (router tables, upload) |
 
@@ -82,6 +89,8 @@ Each M1 table becomes a check that a later simulator must pass.
 - witness peer topology option 2 (no standing witness-to-witness connections): M3 and M5 (I4 estimates the on-demand connections).
 
 ## 5. `gb-protocol` and the Stage 3 testnet
+
+**Status (M2):** built in `crates/gb-protocol`, following SPEC v0.5 Appendix A [P]. Cryptography comes only from `blst` and `sha2`.
 
 `gb-protocol` holds protocol rules as pure, deterministic functions with no networking, storage or clock access:
 
