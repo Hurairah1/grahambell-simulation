@@ -1,6 +1,6 @@
 # GrahamBell — Stage 1 Simulation Specification
 
-**Version:** 0.4 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, 2026-10-06 and 2026-10-07, see the Changelog at the end)
+**Version:** 0.5 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, 2026-10-06, 2026-10-07 and 2026-10-08, see the Changelog at the end)
 **Owner:** Hurairah Shamsi, Protocol Architect
 **Purpose of this file:** single source of truth for building and running the Stage 1 simulation. Where this file and older papers disagree, **this file wins**. Where this file is silent or ambiguous, the implementer must **stop and ask**, not guess.
 
@@ -94,7 +94,9 @@ Proof of Call, Murphy, Data Saving Groups, Proof of Funds, Shamsi OS, smart cont
 | Clock tolerance δ | 2 s | 0.5–10 s | O |
 | Offline deactivation threshold | — | 1 h, 6 h, 24 h, 3 d, 7 d | O |
 | Re-activation wait after return | — | 1 d, 7 d, 14 d, 30 d | O |
-| Long-absence threshold L (§4.7) | 30 days (86,400 PoW-ID blocks at 30 s) | 3 d (8,640 blocks), 7 d (20,160), 30 d (86,400), 90 d (259,200), 365 d (1,051,200) | O |
+| Long-absence threshold L (§4.7) | 30 days (86,400 PoW-ID blocks at 30 s), the primary value | 3 d (8,640 blocks), 7 d (20,160), 30 d (86,400), 90 d (259,200), 365 d (1,051,200) | O |
+| One Chance wait (§4.5) | 1 grace epoch | 1, 2, 5 rounds | O |
+| PoWit arrival deadline D (§3.7) | none yet | 5, 10, 30, 60 s | O |
 | Penalty ladder (lesser offences) | 24 h, then 30 days, then permanent | — | D |
 | Minimum attack time floor (adaptive issuance) | 2 years | 1–10 years | P |
 | Adaptive-cap checkpoint interval (§3.9) | T_min | T_min/4, T_min/2, T_min | D |
@@ -167,7 +169,11 @@ Every member recomputes the chain independently. An honest member signs the PoWi
 
 ### 3.7 Global validation [D]
 
-Validators check: quorum signatures with bitfield and proof of possession; full chain recomputation from inputs; `timestamp = t0 + N`; the block was not received before its own timestamp (local clock, tolerance δ); serialization of issuance; uniqueness. Fork choice: longest chain. A new ID becomes active only after confirmation depth.
+Validators check: quorum signatures with bitfield and proof of possession; full chain recomputation from inputs; `timestamp = t0 + N`; the block was not received before its own timestamp (local clock, tolerance δ); serialization of issuance; uniqueness. A new ID becomes active only after confirmation depth.
+
+**PoWit arrival deadline [O].** A PoW-ID block whose PoWit (the quorum signatures) is not received within D seconds of the block's timestamp is invalid and is not extended. D has no default yet and is swept (§2); M3 measures its effect.
+
+**Fork choice.** The longest valid chain, where every block must carry a valid PoWit; two valid blocks at the same height are resolved by the lower block hash [P].
 
 **Same-height tie-break [P]:** if two valid PoW-ID blocks arrive for the same height, keep the one with the lower block hash. The rule is deterministic, so network latency cannot influence it. Compare against first-seen in M3.
 
@@ -275,6 +281,9 @@ Each KWC has two rotating proposers, changing every 2 PoW-Tx blocks: a **master*
 ### 4.5 One Chance [D]
 
 If an online member's signature is missing from a miner's aggregate, every other member relays the miner's original signed request to that member. The member gets one chance to sign and send its signature to the miner and all members; members relay it to the miner, who gets one chance to include it. A member that still refuses is penalized; a miner that still omits it is refused entry. A proposer that issues a false blacklist or offline request gets One Chance itself; repeating it gets it banned by the next proposer, using the first request embedded in the second as proof. Each exchange has a time limit of *n* blocks.
+
+- **Wait [O].** The default wait before One Chance is judged to have failed is one grace epoch, swept over 1, 2 and 5 rounds (§2). One Chance is the intended mechanism for members that disappear without announcing it.
+- **Client requirement [D].** A node shutting down normally sends its own offline request first, so only crashes and power cuts are unannounced.
 
 ### 4.6 Ban principle [D]
 
@@ -428,7 +437,7 @@ Thresholds below are proposals. **The architect confirms them before results are
 
 - PoW-Tx block interval.
 - Post-admission wait, convergence interval, clock tolerance δ.
-- Offline deactivation and re-activation durations, and the long-absence threshold L.
+- Offline deactivation and re-activation durations.
 - Registered / unregistered capacity split.
 - Strict versus [P] rule for unreachable members (§4.6).
 - Mining-API streaming: format and whether mandatory.
@@ -449,7 +458,67 @@ Thresholds below are proposals. **The architect confirms them before results are
 
 ---
 
+## 13. Stage 3 controlled public testnet: decisions recorded for planning
+
+These decisions are out of scope for Stage 1 code. They are recorded so the simulators and `gb-protocol` do not contradict them.
+
+- **Purpose.** Traction, plus a live test of the core thesis: many miners competing under the pacing at a fixed issuance rate. It is not a test of witness decentralisation.
+- **Witnesses [D].** Run by the foundation, and stated publicly. Each server runs 3 witness nodes as one WC, with a quorum of 2 of 3, real BLS entropy from all online members and real One Chance. Miners are public.
+- **Miner identity [D].**
+  - IPv6: one slot per /64.
+  - IPv4: at most K slots per public IPv4 address (default K = 1, adjustable), each tied to an email-verified account, with one active session per account and a captcha at sign-up.
+  - Every miner's address type and /64 are recorded, so a strict one-slot-per-/64 rule can be evaluated later from real data.
+  - Mainnet keeps one slot per /64 (unregistered) or per ID (registered).
+- **Rewards [D].** Each PoW-ID block pays 0.1 Shamsi testnet credits (105,120 per year at 30 s), with a published cap. This is a testnet-only exception to §6, where PoW-ID blocks carry no reward.
+  - Wording [D]: "testnet credits, no guaranteed value, redeemable at mainnet subject to terms and KYC."
+  - Blocks record a random account ID generated at sign-up, never an email; a private database maps account IDs to emails.
+  - Mainnet IDs are issued only through KYC at genesis.
+- **Code [D].** The miner client is open source; the node and WC code stay private until Stage 4.
+- **Before public launch [D].** A private staging run: about 10 nodes in containers on one server, with injected delay and loss via `tc netem`. This replaces the separate live mini-testnet idea; M3's simulator covers network effects at scale.
+
+---
+
+## Appendix A. Wire formats [P]
+
+Byte layouts that `gb-protocol` and its test vectors follow. They are proposed, and can change before M3.
+
+- **Integers** are big-endian at fixed widths. Every hash input starts with a domain tag (an ASCII string, written below in quotes).
+- **Header.** §3.3 lists the header's fields, not their order; this is the canonical [P] order:
+
+  | Field | Bytes |
+  |---|---|
+  | version | 4 (u32) |
+  | height | 8 (u64) |
+  | previous PoW-ID block hash | 32 |
+  | candidate public key (BLS, G1 compressed) | 48 |
+  | reward wallet | 32 |
+  | address type: 0 = IPv6 /64, 1 = IPv4 | 1 |
+  | address: the /64 prefix, or the IPv4 address left-padded with zeros | 8 |
+  | KWC ID (index of its leader WC) | 8 (u64) |
+  | difficulty target (256-bit) | 32 |
+
+  The header is 173 bytes. Mainnet uses address type 0 only; type 1 exists for the §13 testnet.
+- **Digests.** `header_digest = SHA256("GB/header" ‖ header)`. Block hash = `SHA256("GB/block" ‖ header ‖ E ‖ N)`, with N as a u64; the same-height tie-break compares block hashes as 256-bit integers.
+- **Hash chain (§3.5).** `prev_hash` 32 bytes, height u64, timestamps u64 seconds, nonce u64, E 32 bytes, header_digest 32 bytes. A step wins when `h_n`, read as a 256-bit integer, is below the target.
+- **Signer bitfield.** One bit per KWC seat in seat order: the leader WC's seats 0–9, then each subordinate WC's seats 0–9 in ring-offset order. Bit i is bit (i mod 8) of byte ⌊i/8⌋, least significant first; 40 seats take 5 bytes.
+- **PoWit.** Members sign `"GB/powit" ‖ block hash`; the PoWit carries the aggregate signature (96 bytes) and the signer bitfield.
+- **BLS.** BLS12-381, minimal public-key size: public keys in G1 (48 bytes), signatures in G2 (96 bytes), ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`, with proofs of possession under `BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`.
+- **Equivocation.** Two different headers at the same height, each signed by the same candidate key with the miner signature of §3.4, are proof of equivocation.
+
+---
+
 ## Changelog
+
+### v0.5 — 2026-10-08
+
+Decisions by the protocol architect, recorded after M1.2.
+
+- **§2.** L = 30 days is the primary value (still [O]; sweep unchanged). New rows: One Chance wait [O] (1 grace epoch; sweep 1, 2, 5 rounds) and PoWit arrival deadline D [O] (no default yet; sweep 5, 10, 30, 60 s).
+- **§4.5.** The One Chance wait, and the client requirement [D] that a node shutting down normally sends its own offline request first, so only crashes and power cuts are unannounced.
+- **§3.7.** New PoWit arrival deadline: a PoW-ID block whose PoWit is not received within D seconds of its timestamp is invalid and is not extended; M3 measures the effect. Fork-choice wording clarified ("the longest valid chain, where every block must carry a valid PoWit; two valid blocks at the same height are resolved by the lower block hash [P]"); no rule change.
+- **§12.** The long-absence threshold L is no longer listed as open.
+- **§13 (new).** Stage 3 controlled public testnet: decisions recorded for planning, out of scope for Stage 1 code. Includes the testnet-only exception to §6 (PoW-ID blocks pay testnet credits).
+- **Appendix A (new) [P].** Wire formats for `gb-protocol` and its test vectors: integer encoding, the canonical header field order (with an address type so the §13 testnet can record IPv4 miners), digests, the hash-chain encoding, the signer bitfield, the PoWit message and the BLS ciphersuite. Reason: §3.3–§3.7 name the fields and hashes but not their bytes.
 
 ### v0.4 — 2026-10-07
 
