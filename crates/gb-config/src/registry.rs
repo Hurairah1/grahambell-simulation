@@ -244,6 +244,18 @@ pub const PARAM_DOCS: &[ParamDoc] = &[
         "Clock tolerance δ for signing and validation.",
     ),
     doc(
+        "timing.one_chance_wait_rounds",
+        "§2, §4.5",
+        "rounds",
+        "Wait before One Chance is judged to have failed (one grace epoch by default).",
+    ),
+    doc(
+        "timing.powit_deadline_s",
+        "§2, §3.7",
+        "s",
+        "PoWit arrival deadline D after the block's timestamp.",
+    ),
+    doc(
         "admission.post_admission_wait_rounds",
         "§2, §3.1",
         "rounds",
@@ -449,6 +461,11 @@ pub const SPEC_SECTION_2_ROWS: &[(&str, &[&str])] = &[
         &["issuance.confirmation_depth_blocks"],
     ),
     ("Clock tolerance δ", &["timing.clock_tolerance_s"]),
+    ("One Chance wait (§4.5)", &["timing.one_chance_wait_rounds"]),
+    (
+        "PoWit arrival deadline D (§3.7)",
+        &["timing.powit_deadline_s"],
+    ),
     (
         "Offline deactivation threshold",
         &["offline.deactivation_threshold_s"],

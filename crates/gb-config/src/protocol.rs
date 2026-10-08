@@ -419,6 +419,12 @@ pub struct Timing {
     pub grace_epoch_rounds: Param<u32>,
     /// Clock tolerance δ, in seconds.
     pub clock_tolerance_s: Param<f64>,
+    /// Wait before One Chance is judged to have failed, in rounds (SPEC §4.5; one grace epoch
+    /// by default).
+    pub one_chance_wait_rounds: Param<u32>,
+    /// PoWit arrival deadline D, in seconds after the block's timestamp (SPEC §3.7; "—" until
+    /// chosen).
+    pub powit_deadline_s: Param<Option<f64>>,
 }
 
 impl Default for Timing {
@@ -426,6 +432,14 @@ impl Default for Timing {
         Timing {
             grace_epoch_rounds: Param::decided(5),
             clock_tolerance_s: Param::with_status(2.0, Status::O).swept(Sweep::range(0.5, 10.0)),
+            one_chance_wait_rounds: Param::with_status(5, Status::O)
+                .swept(Sweep::values(vec![1, 2, 5])),
+            powit_deadline_s: Param::with_status(None, Status::O).swept(Sweep::values(vec![
+                Some(5.0),
+                Some(10.0),
+                Some(30.0),
+                Some(60.0),
+            ])),
         }
     }
 }

@@ -71,6 +71,9 @@ node_request_rate_limit_per_s = { value = 1000, status = "D" }
 [timing]
 grace_epoch_rounds = { value = 5, status = "D" }
 clock_tolerance_s = { value = 2.0, status = "O", sweep = { range = [0.5, 10.0] } }
+# One Chance wait: one grace epoch (5 rounds) by default.
+one_chance_wait_rounds = { value = 5, status = "O", sweep = { values = [1, 2, 5] } }
+powit_deadline_s = { status = "O", sweep = { values = [5.0, 10.0, 30.0, 60.0] } }
 
 # ---------------------------------------------------------------- SPEC §2, §3.1: admission
 [admission]

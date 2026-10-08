@@ -89,3 +89,27 @@ fn a_run_outside_a_clean_commit_is_refused_without_allow_dirty() {
     assert!(format!("{error}").contains("--allow-dirty"), "{error}");
     assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
 }
+
+#[test]
+fn analytic_tables_and_brief_match_the_committed_reference_run() {
+    // Reference: results/analytic/reference/, the committed M1.2 run. The M1 tables and the
+    // brief come from exact arithmetic, so the reduced Monte Carlo samples of this test cannot
+    // change them. validation.csv (Monte Carlo values) and parameters.csv (which lists every
+    // SPEC §2 parameter, including rows added after the reference run) are excluded.
+    let reference =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../results/analytic/reference");
+    let out = tempfile::tempdir().unwrap();
+    produce(out.path(), &test_config(), &clean_git()).unwrap();
+    let mut compared = 0;
+    for name in TABLE_FILES
+        .iter()
+        .filter(|n| **n != "validation.csv" && **n != "parameters.csv")
+        .chain(std::iter::once(&BRIEF_FILE))
+    {
+        let expected = std::fs::read(reference.join(name)).unwrap();
+        let actual = std::fs::read(out.path().join(name)).unwrap();
+        assert!(expected == actual, "{name} differs from the reference run");
+        compared += 1;
+    }
+    assert_eq!(compared, TABLE_FILES.len() - 1);
+}
