@@ -5,11 +5,13 @@
 //!
 //! - [`analytic`]: runs the M1 analysis and writes a run directory with provenance.
 //! - [`tables`], [`charts`], [`summary`], [`brief`]: the CSV, PNG and Markdown outputs.
+//! - [`crypto`]: runs the M2 cryptography measurements (`gb crypto`).
 //! - [`params`]: the parameter listing shown by `gb params`.
 
 pub mod analytic;
 pub mod brief;
 pub mod charts;
+pub mod crypto;
 pub mod params;
 pub mod summary;
 pub mod tables;

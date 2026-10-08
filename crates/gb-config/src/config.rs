@@ -1,6 +1,7 @@
 //! The top-level [`Config`]: loading, merging over defaults, and validation.
 
 use crate::analytic::{AnalyticConfig, ModelConstants, RunConfig};
+use crate::crypto_tests::CryptoTestsConfig;
 use crate::error::ConfigError;
 use crate::protocol::{
     Admission, Cac, Capacity, Crypto, Entropy, Genesis, Issuance, Network, Offline, Pacing,
@@ -49,6 +50,8 @@ pub struct Config {
     pub model: ModelConstants,
     /// M1 analysis grids.
     pub analytic: AnalyticConfig,
+    /// M2 measurement settings (`gb crypto`).
+    pub crypto_tests: CryptoTestsConfig,
     /// Seed and Monte Carlo sample sizes.
     pub run: RunConfig,
 }
@@ -101,6 +104,7 @@ impl Config {
         let mut problems = Vec::new();
         self.validate_protocol(&mut problems);
         self.validate_grids(&mut problems);
+        problems.extend(self.crypto_tests.problems());
         if problems.is_empty() {
             Ok(())
         } else {

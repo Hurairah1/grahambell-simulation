@@ -214,6 +214,33 @@ registered_cadences_s = [1.0, 5.0]
 unregistered_cadence_s = 30.0
 miner_session_changes_per_day = [2.0, 8.0]
 
+# ================================================================ M2 measurements (gb crypto)
+[crypto_tests]
+batches = 50
+grinding_trials = 1000
+grinding_budgets = [1, 4, 16, 64]
+expected_winning_attempts = 64
+grinding_members = 10
+subset_quorum = 7
+equivalence_trials = 4000
+equivalence_members = 3
+equivalence_min_p_value = 0.001
+equivocation_trials = 500
+sorted_hex_trials = 10000
+beacon_trials = 100000
+beacon_offsets_k = [1, 3, 6, 12]
+beacon_attacker_shares = [0.1, 0.25]
+beacon_target_fractions = [0.01, 0.1]
+beacon_population = 100000
+placement_trials = 100000
+bench_signer_counts = [3, 10, 27, 40, 60, 100]
+bench_min_seconds = 0.5
+testnet_miners = [5000, 10000, 30000]
+testnet_witnesses_per_server = 3
+testnet_round_s = 30.0
+dkg_member_counts = [30, 40, 60, 100]
+dkg_threshold = { numerator = 2, denominator = 3 }
+
 # ================================================================ Run settings
 [run]
 seed = 20261005

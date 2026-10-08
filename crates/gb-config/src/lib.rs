@@ -12,6 +12,7 @@
 
 pub mod analytic;
 mod config;
+pub mod crypto_tests;
 mod error;
 mod param;
 pub mod protocol;
@@ -19,5 +20,6 @@ pub mod registry;
 
 pub use analytic::{AnalyticConfig, ModelConstants, MonteCarloConfig, RunConfig};
 pub use config::Config;
+pub use crypto_tests::CryptoTestsConfig;
 pub use error::ConfigError;
 pub use param::{Param, Status, Sweep};

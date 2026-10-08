@@ -50,7 +50,7 @@ blst = "0.3.17"
 bls12_381 = "0.8"
 group = "0.13"
 ff = "0.13"
-criterion = { version = "0.8", default-features = false }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

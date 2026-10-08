@@ -4,6 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use gb_cli::analytic::{AnalyticOptions, run_analytic};
+use gb_cli::crypto::{CryptoOptions, run_crypto};
 use gb_cli::load_config;
 use gb_cli::params::{ListingFormat, render_listing};
 use gb_config::registry::parameter_listing;
@@ -30,6 +31,21 @@ enum Command {
         seed: Option<u64>,
         /// Directory that receives one sub-directory per run.
         #[arg(long, default_value = "results/analytic")]
+        out: PathBuf,
+        /// Allow a working tree with uncommitted changes (recorded in run.json).
+        #[arg(long)]
+        allow_dirty: bool,
+    },
+    /// Run the M2 cryptography measurements and write tables, SUMMARY.md, timings and run.json.
+    Crypto {
+        /// Configuration file to merge over the defaults.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Seed overriding the configuration's.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Directory that receives one sub-directory per run.
+        #[arg(long, default_value = "results/crypto")]
         out: PathBuf,
         /// Allow a working tree with uncommitted changes (recorded in run.json).
         #[arg(long)]
@@ -84,6 +100,31 @@ fn main() -> anyhow::Result<ExitCode> {
                 command_line: std::env::args().collect(),
             };
             let outcome = run_analytic(&options)?;
+            println!("Wrote {}", outcome.run_dir.display());
+            println!(
+                "Cross-checks passed: {} of {}",
+                outcome.checks - outcome.failed.len(),
+                outcome.checks
+            );
+            if !outcome.failed.is_empty() {
+                eprintln!("Failed checks: {}", outcome.failed.join(", "));
+                return Ok(ExitCode::FAILURE);
+            }
+        }
+        Command::Crypto {
+            config,
+            seed,
+            out,
+            allow_dirty,
+        } => {
+            let outcome = run_crypto(&CryptoOptions {
+                config_path: config,
+                seed,
+                out_root: out,
+                allow_dirty,
+                repo_dir: std::env::current_dir()?,
+                command_line: std::env::args().collect(),
+            })?;
             println!("Wrote {}", outcome.run_dir.display());
             println!(
                 "Cross-checks passed: {} of {}",
