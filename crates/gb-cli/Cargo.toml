@@ -15,6 +15,7 @@ path = "src/main.rs"
 gb-config.workspace = true
 gb-runlog.workspace = true
 gb-analytic.workspace = true
+gb-protocol.workspace = true
 serde.workspace = true
 csv.workspace = true
 clap.workspace = true

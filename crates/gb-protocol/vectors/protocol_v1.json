@@ -1,0 +1,186 @@
+{
+  "allocation": [
+    {
+      "beacon": "66fe416413665e15bf5fba9f14b6db3dc9fe76d00dc0de5310bae6afa58855f9",
+      "filled": 0,
+      "id": "b27323ece770e77561f6df134228b8252b6c4039b185aa72a841a4dba1bcc58e",
+      "position": 0
+    },
+    {
+      "beacon": "541dc21bf51ea74727d908f54111eb89c252240f767a73e9fae2a169f43131ac",
+      "filled": 9,
+      "id": "7eab517c2f89496c3f205c7d705aff0835682c5f796c6dac2ca5b69e7db73c44",
+      "position": 3
+    },
+    {
+      "beacon": "623a4f1ad5a5ef7e9169f61dc54431a1eb758148e2db7f076f588e33f90245a2",
+      "filled": 999,
+      "id": "6ea4ae383db4d1224e75a4797b20bdd9930c888d982c857b18f806a24d76e898",
+      "position": 194
+    },
+    {
+      "beacon": "0f28c4f14a87cfbf959e26bf64cabb22e2ce80bb03f9008961e1f44172caa207",
+      "filled": 2899999,
+      "id": "243ef6c0370ba527d5c7f49e7c18f4dd6b214f924a4aa241ae0d654e95b0c6ff",
+      "position": 2724284
+    }
+  ],
+  "chain": {
+    "block_hash": "dbc25d956470d96c4b070c85344d3aad3c64b6ccd569d87a574d8e6335612dfc",
+    "first_steps": [
+      "86f20628ca7888411b82b2700484a5b3646c81fdab77b9fcca8f68deaa7dd0ca",
+      "a767dada8cb89f96f58f2f75ba08817a0852f2f4d828162aa33344165d396c75",
+      "d2297d7e402a6111ec1f17ad39cb28b95ec223eb0d990180fec70a01028edd4a",
+      "3e94f073c719acbf21344f1a00e908c31cd06d721676dd7c4b7cd10c641fa404",
+      "944d838b58449e8075f570952a6703ba249d67225f883e6107b282dd308e61a0"
+    ],
+    "t0": 1001,
+    "target": "2000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": 1008,
+    "winning_hash": "17efacb920038acce0efee6d8a9c759f90d46cc907af6d396dd0218c2bbe8b1a",
+    "winning_step": 7
+  },
+  "committee": [
+    {
+      "active": 2900000,
+      "beacon": "78c4e853fc4634a3605f35b1def305e064a93da7cd00451270dc6e02289656f2",
+      "draw": 0,
+      "position": 217072
+    },
+    {
+      "active": 2900000,
+      "beacon": "78c4e853fc4634a3605f35b1def305e064a93da7cd00451270dc6e02289656f2",
+      "draw": 1,
+      "position": 312652
+    },
+    {
+      "active": 2900000,
+      "beacon": "78c4e853fc4634a3605f35b1def305e064a93da7cd00451270dc6e02289656f2",
+      "draw": 2,
+      "position": 354589
+    },
+    {
+      "active": 2900000,
+      "beacon": "78c4e853fc4634a3605f35b1def305e064a93da7cd00451270dc6e02289656f2",
+      "draw": 3,
+      "position": 1436720
+    }
+  ],
+  "entropy": {
+    "aggregate": "a3a799c9669ca44735b1126450c51039eb06c5fc12c806165135e76aebd6007195b82f0b87498531563f97d72e298cbb02a53a16b77865932862b4f8037976637984693bbf6fa897a55c76e1c664b64883cf1377f87624c3922ad397f797a62c",
+    "entropy": "87b42bcfbede9d1bd626320ce7a67f0b66913f6667e838f403d47c9d6afe7586",
+    "header_digest": "7c9fcb07fd118fec17d0c888c704088c00384e74bd87b8b04677e380e01914c6",
+    "member_signatures": [
+      "b50617e56e49c39b5dfd0ecdc28246c237e760a7cef1c34848a6c47363a169ab805e15fee177e2c3488989b1d2e57a3a04827350e258c48ed72c08ad994e039b597784763b2a2ef79417a1660c14c13d0a721455f312899682208f3193ebeb5a",
+      "93271021d8b62384123b1ac9c6185c96cda58ade2c21dac2b8031c747c48b87f13bac628c6e94010f47badcc59c9627a13ddd636a0a2bff08080b576b3f936b4a1e71848caa41d0830e21845a04cd0052ef488c693340c60a89364452ec64547",
+      "91b98b7e8aaebe0b6aa09a34f79cac77312296ec88362c2eaba9c40e22eb58edc4cd1d2e11d2bc7d0771672634507c8119826f8022a2878bdc107582f70cd1df25c3f97695019241bad0829cb1bc719944c9a83367884ed9782d1a67c972ca09",
+      "a848d6f4c0ede69b5d8c7b5cb469a2b4e31c09318c6269c017f0566010a100180949d7ec41cf23e53371bd639f9686c21085ff02acd44f7b7409e04b0e667dc16f0a9aa82ba35e57f475e60ec9d313cf29fed7a4067948cd6cfef929ed4864b1"
+    ],
+    "miner_signature": "828c4e83c80e30c0fca6c2e5b88cfeee4e44a1fabda4ba357d57d658ec38c3e2031780b4d549e5601969d0dbb3d110b1070632e49b2393da7317b72a34205ea214a35053efc04fd01bea09a2b8b95e1f943e713f4071d47e71bbf5d5a2c5f670",
+    "signer_bitfield": "0f"
+  },
+  "headers": [
+    {
+      "address": "20010db800000001",
+      "address_type": 0,
+      "candidate_pk": "a7fd808cffa20bad3393785fb8e24ca4ea360b07f0f8b3271c0e22231bb86d1438df4eab4706450c0e699b2c3fd9ccab",
+      "encoding": "00000001000000000000000a5384c9e6c08e44fddd5c58a4e22dc31c9d961d82b50fc1c326c3f8ffb170f29fa7fd808cffa20bad3393785fb8e24ca4ea360b07f0f8b3271c0e22231bb86d1438df4eab4706450c0e699b2c3fd9ccab6879bf9168912ff696a6aa87d3132d61e619bc577f15108e2ed2969fadf7647a0020010db80000000100000000000000072000000000000000000000000000000000000000000000000000000000000000",
+      "header_digest": "7c9fcb07fd118fec17d0c888c704088c00384e74bd87b8b04677e380e01914c6",
+      "height": 10,
+      "kwc_id": 7,
+      "prev_hash": "5384c9e6c08e44fddd5c58a4e22dc31c9d961d82b50fc1c326c3f8ffb170f29f",
+      "reward_wallet": "6879bf9168912ff696a6aa87d3132d61e619bc577f15108e2ed2969fadf7647a",
+      "target": "2000000000000000000000000000000000000000000000000000000000000000",
+      "version": 1
+    },
+    {
+      "address": "00000000c0000207",
+      "address_type": 1,
+      "candidate_pk": "a7fd808cffa20bad3393785fb8e24ca4ea360b07f0f8b3271c0e22231bb86d1438df4eab4706450c0e699b2c3fd9ccab",
+      "encoding": "00000001000000000000000a5384c9e6c08e44fddd5c58a4e22dc31c9d961d82b50fc1c326c3f8ffb170f29fa7fd808cffa20bad3393785fb8e24ca4ea360b07f0f8b3271c0e22231bb86d1438df4eab4706450c0e699b2c3fd9ccab6879bf9168912ff696a6aa87d3132d61e619bc577f15108e2ed2969fadf7647a0100000000c000020700000000000000072000000000000000000000000000000000000000000000000000000000000000",
+      "header_digest": "9f60a848fec77136515dd11afa673839898567499d5c632ec2ec81f1ed9ad371",
+      "height": 10,
+      "kwc_id": 7,
+      "prev_hash": "5384c9e6c08e44fddd5c58a4e22dc31c9d961d82b50fc1c326c3f8ffb170f29f",
+      "reward_wallet": "6879bf9168912ff696a6aa87d3132d61e619bc577f15108e2ed2969fadf7647a",
+      "target": "2000000000000000000000000000000000000000000000000000000000000000",
+      "version": 1
+    }
+  ],
+  "issuance": [
+    {
+      "interval_s": 30,
+      "online_miners": 1000,
+      "target": "00022f3d9397b043b874df5e583356270c6cae376eba812918b66895a3f9fe16"
+    },
+    {
+      "interval_s": 30,
+      "online_miners": 2900000,
+      "target": "000000315e108f551f0c661fb93bb13309732631fbb67136d55f0c37d789b551"
+    }
+  ],
+  "keys": [
+    {
+      "proof_of_possession": "8e163246678a409af5cf72de34a8fbf1d149ebed13395f122ae59e5514fd5377fe2215c8d5cbef599ac20e54443218171208e9d0896a37e27ce37fcf59582507c9ac9fd07eb71dd211f175043b25325e9b127d47c6c953b358ddac844308c288",
+      "public": "a7fd808cffa20bad3393785fb8e24ca4ea360b07f0f8b3271c0e22231bb86d1438df4eab4706450c0e699b2c3fd9ccab",
+      "role": "miner",
+      "secret": "19bda9b6db3326fd9427bf3b4e6ad19375d4ff54d716cc3a9f83cb315ee2c675"
+    },
+    {
+      "proof_of_possession": "a5912bc6e5e9521b89856c7d7a46f4dc298aa086fe84d331a04631649ce1f4e59565bc30573ce3001556202d3cbc0ff008cf01951691dce6de351575eadb8518c44936073789076696e5ca48cc87abe10ce749b506fe20dec9f8710579209ca5",
+      "public": "a0acf162b80f2f93b37a965933b7c56925a2195d60760ee35fed9035e9481bc3263e5e041ce000ff7ec83c65db8f56fa",
+      "role": "member",
+      "secret": "29a736258d929d19be2385951899e1ad8d658d666e99b6aa86744a32b8843990"
+    },
+    {
+      "proof_of_possession": "b254fc7ff99a62fb7724d0c2f0d730302ed00c7faca83e47a4bcbde6bf349ebc354a674f40c074e54fb933577aef245d0db6105b756641c384f376635dee3a0dd66a6e6fb37b2f9e8efc25dcf63af1ba8ff2dec1ef9d25212b40d6a375fd74e2",
+      "public": "9678a4701bea0ab6a44d56fed79115187e695dca93d906b33b625fc817fd3c2bae9c3064957364b2707d45d7cc5ada66",
+      "role": "member",
+      "secret": "1327e67560fcf5a35230afbafa743c5b5a88056ff96161b2d281eee297846bc7"
+    },
+    {
+      "proof_of_possession": "b3660bb8aae5823eeaf2b7cc90bf2dfb5fdadeac2b994ba834ac3bea5fa0cff465f4fd3dba54b1fc439e04150585fd2a0f1a0bb59f0e75071b425ad04dc3fa94369dea33b8139ea280625d09f99393ec4d68d72dbc727d735beeffdbc3d29c0d",
+      "public": "b0a1342af47b66e6f0536a048792e36ca964a7fae9dc9d567ed3a668e0b0cef61c76eb078f60f39d4e1d99fb44094a64",
+      "role": "member",
+      "secret": "519af94258dc2a9bb0e16d3c8b4cf0f4ba00797bda0779df37109af66aaf041b"
+    },
+    {
+      "proof_of_possession": "8403f9e088adec71262c0d68d795eccb3fb59602d6fbb95c0d0b0bab049ffa1a41fc8a9c06184e1cf52957cbc11be1d30ac5bd0dfa982bb723a35daa27ea8309e56e08e92c3f03f7c874344a55ac05c032bc752b0952ecbf0801fd6bcb0cb4e1",
+      "public": "b0dfdf85bc04184f3f96b12c392ca2243cd666ba9fe1f60ac762ba4f9163519c3e7ec759a6eedbd14ca64bba8898828f",
+      "role": "member",
+      "secret": "322b7f30d7bf6d8e65f807492b881c0c899244ebaacc2349f5773876d8afe41d"
+    }
+  ],
+  "powit": {
+    "aggregate": "85a3786a8258767af48bea5654b91cbcdf01e9ec7019b8666f4e57e1c1bb031dc1e8e832960b3113335ee94139e103561099edaf84e29dc98d869a44e08d3a540b2795502acf5f6563f54df90620c72df4fec9c62219d9bc23c4f4228c7ca1b6",
+    "signer_bitfield": "07"
+  },
+  "protocol_version": 1,
+  "spec": "SPEC v0.5 Appendix A [P]",
+  "validation": [
+    {
+      "block_at": 1008.0,
+      "case": "valid block",
+      "powit_at": 1009.0,
+      "verdict": "valid"
+    },
+    {
+      "block_at": 1005.5,
+      "case": "received 2.5 s before its timestamp (δ = 2 s)",
+      "powit_at": 1008.0,
+      "verdict": "ReceivedEarly"
+    },
+    {
+      "block_at": 1008.0,
+      "case": "PoWit 10.5 s after the timestamp (D = 10 s)",
+      "powit_at": 1018.5,
+      "verdict": "PowitLate"
+    },
+    {
+      "block_at": 1009.0,
+      "case": "timestamp is t0 + N + 1",
+      "powit_at": 1009.0,
+      "verdict": "TimestampMismatch"
+    }
+  ]
+}

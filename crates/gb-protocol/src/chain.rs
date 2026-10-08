@@ -1,0 +1,178 @@
+//! The hash chain and the winning step (SPEC §3.5, Appendix A).
+//!
+//! ```text
+//! h_0     = SHA256("GB/chain" ‖ prev_hash ‖ height ‖ t0 ‖ nonce=0 ‖ E ‖ header_digest)
+//! h_{n+1} = SHA256("GB/chain" ‖ h_n ‖ prev_hash ‖ height ‖ (t0+n+1) ‖ nonce=n+1 ‖ E ‖ header_digest)
+//! ```
+//!
+//! The miner wins at the first `n` with `h_n < target`, and the block timestamp is `t0 + n`.
+
+use crate::encoding::Header;
+use crate::hash::{Hash, tagged};
+
+/// Domain tag of chain steps.
+pub const CHAIN_TAG: &[u8] = b"GB/chain";
+
+/// Where the chain starts (SPEC §3.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartRule {
+    /// Rule (a), the protocol rule: `t0 = timestamp(previous PoW-ID block) + 1 s`, whenever the
+    /// entropy arrives.
+    A,
+    /// Rule (b), comparison only (S13): the chain starts at the local arrival time of the
+    /// miner's entropy.
+    B {
+        /// Local arrival time of the entropy, in seconds.
+        arrival: u64,
+    },
+}
+
+/// The chain's start time `t0` under a start rule.
+pub fn chain_start(previous_block_timestamp: u64, rule: StartRule) -> u64 {
+    match rule {
+        StartRule::A => previous_block_timestamp + 1,
+        StartRule::B { arrival } => arrival,
+    }
+}
+
+/// Inputs that fix a chain for one round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChainInputs {
+    /// Previous PoW-ID block hash.
+    pub prev_hash: Hash,
+    /// Height of the block being mined.
+    pub height: u64,
+    /// Chain start time.
+    pub t0: u64,
+    /// Entropy E committed to the header.
+    pub entropy: Hash,
+    /// `header_digest`.
+    pub header_digest: Hash,
+}
+
+impl ChainInputs {
+    /// Inputs for `header` with entropy `entropy`, starting at `t0`.
+    pub fn new(header: &Header, entropy: Hash, t0: u64) -> ChainInputs {
+        ChainInputs {
+            prev_hash: header.prev_hash,
+            height: header.height,
+            t0,
+            entropy,
+            header_digest: header.digest(),
+        }
+    }
+
+    /// `h_0`.
+    pub fn first(&self) -> Hash {
+        tagged(
+            CHAIN_TAG,
+            &[
+                &self.prev_hash,
+                &self.height.to_be_bytes(),
+                &self.t0.to_be_bytes(),
+                &0u64.to_be_bytes(),
+                &self.entropy,
+                &self.header_digest,
+            ],
+        )
+    }
+
+    /// `h_{n}` from `h_{n−1}`, for `n ≥ 1`.
+    pub fn next(&self, previous: &Hash, n: u64) -> Hash {
+        tagged(
+            CHAIN_TAG,
+            &[
+                previous,
+                &self.prev_hash,
+                &self.height.to_be_bytes(),
+                &(self.t0 + n).to_be_bytes(),
+                &n.to_be_bytes(),
+                &self.entropy,
+                &self.header_digest,
+            ],
+        )
+    }
+
+    /// The chain `h_0, h_1, …`, step by step.
+    pub fn steps(&self) -> impl Iterator<Item = (u64, Hash)> + '_ {
+        let mut state: Option<(u64, Hash)> = None;
+        std::iter::from_fn(move || {
+            let next = match state {
+                None => (0, self.first()),
+                Some((n, h)) => (n + 1, self.next(&h, n + 1)),
+            };
+            state = Some(next);
+            Some(next)
+        })
+    }
+
+    /// The first winning step `N` and `h_N`, searching at most `max_steps` steps.
+    pub fn winning_step(&self, target: &Hash, max_steps: u64) -> Option<(u64, Hash)> {
+        self.steps()
+            .take(usize::try_from(max_steps).unwrap_or(usize::MAX))
+            .find(|(_, h)| below_target(h, target))
+    }
+
+    /// `h_n`, computed from `h_0` (every step must be computed in order).
+    pub fn step(&self, n: u64) -> Hash {
+        let mut h = self.first();
+        for i in 1..=n {
+            h = self.next(&h, i);
+        }
+        h
+    }
+}
+
+/// True when `hash`, read as a 256-bit big-endian integer, is below `target`.
+pub fn below_target(hash: &Hash, target: &Hash) -> bool {
+    hash < target
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::encoding::tests::sample;
+
+    #[test]
+    fn rule_a_starts_one_second_after_the_previous_block_and_rule_b_at_arrival() {
+        assert_eq!(chain_start(1_000, StartRule::A), 1_001);
+        assert_eq!(chain_start(1_000, StartRule::B { arrival: 1_017 }), 1_017);
+    }
+
+    #[test]
+    fn steps_follow_the_recurrence() {
+        let inputs = ChainInputs::new(&sample(), [7; 32], 1_001);
+        let steps: Vec<(u64, Hash)> = inputs.steps().take(4).collect();
+        assert_eq!(steps[0].1, inputs.first());
+        for w in steps.windows(2) {
+            assert_eq!(w[1].0, w[0].0 + 1);
+            assert_eq!(w[1].1, inputs.next(&w[0].1, w[1].0));
+        }
+        assert_eq!(inputs.step(3), steps[3].1);
+    }
+
+    #[test]
+    fn winning_step_is_the_first_below_target() {
+        let inputs = ChainInputs::new(&sample(), [9; 32], 5);
+        // Target 2^252: each step wins with probability 1/16.
+        let mut target = [0u8; 32];
+        target[0] = 0x10;
+        let (n, h) = inputs.winning_step(&target, 10_000).unwrap();
+        assert!(below_target(&h, &target));
+        assert!(
+            inputs
+                .steps()
+                .take(n as usize)
+                .all(|(_, x)| !below_target(&x, &target))
+        );
+    }
+
+    #[test]
+    fn a_different_entropy_or_start_gives_a_different_chain() {
+        let a = ChainInputs::new(&sample(), [1; 32], 10);
+        let b = ChainInputs::new(&sample(), [2; 32], 10);
+        let c = ChainInputs::new(&sample(), [1; 32], 11);
+        assert_ne!(a.first(), b.first());
+        assert_ne!(a.first(), c.first());
+    }
+}

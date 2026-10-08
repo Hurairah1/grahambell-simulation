@@ -35,6 +35,12 @@ enum Command {
         #[arg(long)]
         allow_dirty: bool,
     },
+    /// Write the gb-protocol test vectors (SPEC Appendix A) to a directory.
+    Vectors {
+        /// Directory that receives protocol_v1.json.
+        #[arg(long, default_value = "crates/gb-protocol/vectors")]
+        out: PathBuf,
+    },
     /// Print every SPEC §2 parameter with its value, status tag and sweep.
     Params {
         /// Configuration file to merge over the defaults.
@@ -88,6 +94,12 @@ fn main() -> anyhow::Result<ExitCode> {
                 eprintln!("Failed checks: {}", outcome.failed.join(", "));
                 return Ok(ExitCode::FAILURE);
             }
+        }
+        Command::Vectors { out } => {
+            std::fs::create_dir_all(&out)?;
+            let path = out.join(gb_protocol::vectors::VECTOR_FILE);
+            std::fs::write(&path, gb_protocol::vectors::render()?)?;
+            println!("Wrote {}", path.display());
         }
         Command::Params { config, format } => {
             let config = load_config(config.as_deref())?;

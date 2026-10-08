@@ -1,0 +1,33 @@
+[package]
+name = "gb-crypto-tests"
+description = "M2 measurements with real SHA-256 and BLS12-381: grinding, sorted-hash ambiguity, beacon withholding, benchmarks, threshold-BLS setup cost, simulator equivalence."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+gb-config.workspace = true
+gb-runlog.workspace = true
+gb-analytic.workspace = true
+gb-protocol.workspace = true
+blst.workspace = true
+bls12_381.workspace = true
+group.workspace = true
+ff.workspace = true
+sha2.workspace = true
+serde.workspace = true
+rand_core.workspace = true
+libm.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "crypto"
+harness = false
+
+[lints]
+workspace = true
