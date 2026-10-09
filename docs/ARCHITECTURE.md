@@ -77,6 +77,19 @@ Each M1 table becomes a check that a later simulator must pass.
 | M2 C4 timings and the §13 server estimate | M5 S27 hardware benchmark; Stage 3 staging run |
 | M2 C5 threshold-BLS setup cost | the M4 decision on SPEC §12 [P] threshold entropy |
 | M2 C6 entropy stand-in equivalence | M3 may use the stand-in only while this check passes |
+| M2 C1(c′) online-set lever (1.88× for one colluding member) | M4 S11(f) under the strict rule, the [P] rule and threshold BLS entropy |
+| M2.1 witness double-signing detection (`witness_equivocators`) | M4 ban scenarios |
+| M2.1 optimistic entropy verification (SPEC §3.4 [P]) | M4/M5 load model |
+
+### Planned for M4–M6 (decided 2026-10-09)
+
+- **M4** compares two quorum regimes, each with and without threshold BLS entropy, at KWC sizes of 40, 60, 100 and 200 seats:
+  - two-thirds everywhere;
+  - the split rule: 51% for the PoWit and for threshold-BLS entropy, two-thirds for bans, MOBu/MOBr and offline records. Under the split rule the entropy threshold is also 51%.
+
+  M4 also measures the online-set grinding lever (S11(f)) and the witness double-signing rule.
+- **M5** benchmarks household load at 30, 40, 60, 100 and 200 seats.
+- **M6** reruns the analysis and simulations with the chosen configuration, and publishes the selection trade-offs alongside the final results.
 | H1–H3 quorum feasibility under honest downtime, minimum uptime, absent seats per L | M3 household profiles (H7), M4 with the forced-signing and ban rules (§4.5–§4.6) |
 | I1–I4 KWC size trade-off: security, liveness, load, on-demand connections | M2 threshold BLS key setup at each size, M4, M5 household limits (router tables, upload) |
 

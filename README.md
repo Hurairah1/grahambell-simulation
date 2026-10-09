@@ -13,6 +13,7 @@ GrahamBell is a proposed Layer 1 blockchain whose Sybil resistance comes from ti
 | M1.1 | done | The architect's decisions on M1 (SPEC v0.3): 2.9M genesis IDs, adaptive-cap safety factor, count-based difficulty, committee seat lottery, adopted allocation algorithm, deactivation instead of bans. Adds the quorum trade-off (section G) and a [public brief](docs/M1_PUBLIC_BRIEF.md) |
 | M1.2 | done | The architect's decisions on M1.1 (SPEC v0.4): seats survive downtime (only bans and absences longer than L vacate them), distinct episodes as the H6 measure, placement without the committee, committee departures, conflicting decisions and proposer rights. Adds quorum feasibility under honest downtime (section H), the KWC size trade-off (section I) and the Apache 2.0 licence |
 | M2 | done | SPEC v0.5 (M1.2 answers, PoWit arrival deadline, Stage 3 testnet decisions, wire formats). The shared protocol core `gb-protocol` with test vectors, and `gb-crypto-tests`: grinding, sorted-hash ambiguity, beacon withholding, placement grinding, benchmarks, a threshold-BLS prototype and the simulator's entropy stand-in, all with real SHA-256 and BLS12-381 |
+| M2.1 | done | SPEC v0.6: H1–H9 thresholds locked before M3, the online-set grinding lever (S11(f)), optimistic entropy verification, the fork-choice order and witness double-signing evidence; a committed crypto reference run |
 | M3–M6 | planned | Simulators, cost model, full-scale runs; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 
 M1 results are the ground truth that later simulators must reproduce before their own results are trusted. Every modelling assumption behind them is listed in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).
@@ -70,6 +71,8 @@ cargo run --release -p gb-cli -- vectors       # rewrite crates/gb-protocol/vect
 ## Where each output lives
 
 The reference run for this release is committed in [`results/analytic/reference/`](results/analytic/reference/); start with its [`SUMMARY.md`](results/analytic/reference/SUMMARY.md). It was produced from a clean commit, which its `run.json` records together with a SHA-256 of every file. New runs are written to `results/analytic/<run-id>/` and stay ignored by git.
+
+The M2 crypto reference run is committed in [`results/crypto/reference/`](results/crypto/reference/), with its [`SUMMARY.md`](results/crypto/reference/SUMMARY.md). Its `bench/` timings come from the machine named in [`bench/BENCH.md`](results/crypto/reference/bench/BENCH.md) and will differ on other machines; everything else reproduces from the commit in its `run.json`. New crypto runs go to `results/crypto/<run-id>/` and stay ignored.
 
 Inside each run directory (`results/analytic/<run-id>/`, or `results/analytic/reference/`):
 
@@ -142,7 +145,7 @@ Unknown keys are rejected. A file cannot change a status tag, because status tag
 | `crates/gb-protocol` | M2 protocol core: header encoding, entropy and BLS, hash chain, validation, difficulty and issuance, allocation, committee lottery; test vectors in `vectors/` |
 | `crates/gb-crypto-tests` | M2 measurements with real cryptography, and criterion benchmarks in `benches/` |
 | `crates/gb-cli` | The `gb` command-line tool: tables, charts, summary |
-| `results/` | Generated outputs; only the reference run in `results/analytic/reference/` is committed |
+| `results/` | Generated outputs; only the reference runs in `results/analytic/reference/` and `results/crypto/reference/` are committed |
 
 ## Licence
 
