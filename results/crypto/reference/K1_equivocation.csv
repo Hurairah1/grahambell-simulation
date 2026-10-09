@@ -1,0 +1,5 @@
+case,pairs,flagged,expected
+"two different headers, same height, same key",500,500,500
+the same header twice,500,0,0
+different heights (next round),500,0,0
+different candidate keys,500,0,0

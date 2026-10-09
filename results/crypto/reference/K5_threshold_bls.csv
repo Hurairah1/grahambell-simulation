@@ -1,0 +1,5 @@
+members,threshold,messages_sent,messages_received,bytes_sent,bytes_received,g1_multiplications,combined_signature_verifies
+30,20,30,58,1888,28768,629,true
+40,27,40,78,2544,51792,1119,true
+60,40,60,118,3808,115168,2459,true
+100,67,100,198,6384,321552,6799,true

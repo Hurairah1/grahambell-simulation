@@ -1,0 +1,22 @@
+operation,signers,ops_per_second,microseconds
+BLS sign,1,2639.1884653820257,378.9043537878788
+BLS verify,1,997.8887766940363,1002.1156899999999
+SHA-256 chain step,1,1032075.3890113698,0.9689214670237463
+aggregate signatures (with subgroup checks),3,5919.654836765778,168.92876824324324
+"aggregate-verify, one message (PoWit)",3,1081.6449846464293,924.5177615526802
+"entropy verify (miner + members, SPEC §3.4)",3,451.50369359488974,2214.8213053097343
+aggregate signatures (with subgroup checks),10,1755.169302941288,569.7456070615035
+"aggregate-verify, one message (PoWit)",10,1073.8563996268165,931.2232067039105
+"entropy verify (miner + members, SPEC §3.4)",10,378.70893654765456,2640.5503105263156
+aggregate signatures (with subgroup checks),27,659.0802074349101,1517.2660151515151
+"aggregate-verify, one message (PoWit)",27,1081.6698289380752,924.4965268022182
+"entropy verify (miner + members, SPEC §3.4)",27,278.15429991092924,3595.1268785714283
+aggregate signatures (with subgroup checks),40,435.42423765969414,2296.6107844036696
+"aggregate-verify, one message (PoWit)",40,1073.3092761085973,931.6979013035383
+"entropy verify (miner + members, SPEC §3.4)",40,227.44873522980836,4396.595122807017
+aggregate signatures (with subgroup checks),60,293.6333306637336,3405.607931972789
+"aggregate-verify, one message (PoWit)",60,1050.6266943290416,951.8128612167301
+"entropy verify (miner + members, SPEC §3.4)",60,178.44455980026058,5603.981433333333
+aggregate signatures (with subgroup checks),100,175.41981300208064,5700.610340909091
+"aggregate-verify, one message (PoWit)",100,1024.9252981797888,975.6808635477583
+"entropy verify (miner + members, SPEC §3.4)",100,128.2819526483604,7795.328799999999

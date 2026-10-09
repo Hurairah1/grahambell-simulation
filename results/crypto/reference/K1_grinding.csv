@@ -1,0 +1,19 @@
+experiment,description,budget,trials,honest_mean_attempts,attacker_mean_attempts,advantage,ci_low,ci_high,independent_tries_advantage,distinct_entropies
+a,old flow: miner signs last with a non-unique signature (free nonce),1,1000,62.404,62.404,1.0,1.0,1.0,1.0,1.0
+a,old flow: miner signs last with a non-unique signature (free nonce),4,1000,62.404,16.859,3.701524408327896,3.417374176597719,3.985674640058073,3.9072227478027344,4.0
+a,old flow: miner signs last with a non-unique signature (free nonce),16,1000,62.404,4.443,14.045464776052217,13.015765672371838,15.075163879732596,14.255029059621577,16.0
+a,old flow: miner signs last with a non-unique signature (free nonce),64,1000,62.404,1.601,38.978138663335415,36.55457652196349,41.40170080470734,40.640862448389925,64.0
+b,miner aggregates any member subset meeting the quorum,1,1000,63.372,63.372,1.0,1.0,1.0,1.0,1.0
+b,miner aggregates any member subset meeting the quorum,4,1000,63.372,16.647,3.806812038205082,3.480130685456484,4.13349339095368,3.9072227478027344,4.0
+b,miner aggregates any member subset meeting the quorum,16,1000,63.372,4.534,13.977062196735774,12.748329049594986,15.205795343876563,14.255029059621577,16.0
+b,miner aggregates any member subset meeting the quorum,64,1000,63.372,1.581,40.08349146110057,36.98872610076744,43.178256821433706,40.640862448389925,64.0
+c,old flow: colluding last witness signs with a free nonce,1,1000,62.829,62.829,1.0,1.0,1.0,1.0,1.0
+c,old flow: colluding last witness signs with a free nonce,4,1000,62.829,15.81,3.9740037950664138,3.6378290229856245,4.3101785671472035,3.9072227478027344,4.0
+c,old flow: colluding last witness signs with a free nonce,16,1000,62.829,4.266,14.727848101265822,13.41998465337046,16.035711549161185,14.255029059621577,16.0
+c,old flow: colluding last witness signs with a free nonce,64,1000,62.829,1.544,40.692357512953365,37.694597434691254,43.690117591215476,40.640862448389925,64.0
+c′,current flow: colluding last witness signs or withholds (withholding triggers One Chance),1,1000,59.8,59.8,1.0,1.0,1.0,1.0,1.0
+c′,current flow: colluding last witness signs or withholds (withholding triggers One Chance),2,1000,59.8,31.869,1.876431642034579,1.7758411450775446,1.9770221389916134,1.984375,2.0
+e,current flow: BLS signatures are unique; re-signing changes nothing,1,1000,64.544,63.78,1.0119786767011603,0.9326284282442775,1.091328925158043,1.0,1.0
+e,current flow: BLS signatures are unique; re-signing changes nothing,4,1000,64.544,63.78,1.0119786767011603,0.9326284282442775,1.091328925158043,1.0,1.0
+e,current flow: BLS signatures are unique; re-signing changes nothing,16,1000,64.544,63.78,1.0119786767011603,0.9326284282442775,1.091328925158043,1.0,1.0
+e,current flow: BLS signatures are unique; re-signing changes nothing,64,1000,64.544,63.78,1.0119786767011603,0.9326284282442775,1.091328925158043,1.0,1.0

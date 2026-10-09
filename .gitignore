@@ -4,5 +4,8 @@
 !/results/analytic/
 /results/analytic/*
 !/results/analytic/reference/
+!/results/crypto/
+/results/crypto/*
+!/results/crypto/reference/
 /.history/
 .DS_Store

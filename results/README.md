@@ -14,4 +14,6 @@ Each analysis writes one directory per run, `results/<analysis>/<run-id>/`. The 
 | `config.resolved.toml` | The exact configuration used |
 | `run.json` | Run id, time, git commit, dirty flag, seed, config hash, toolchain, and a SHA-256 for every file above |
 
+The M2 **crypto reference run** in [`crypto/reference/`](crypto/reference/) is committed the same way. Its `bench/` timings were measured on the machine named in `crypto/reference/bench/BENCH.md` (CPU, logical cores and rustc version) and will differ elsewhere; everything outside `bench/` reproduces from the commit in its `run.json`. New crypto runs stay ignored.
+
 To check that a rerun reproduces a run, compare the `sha256` fields in the two `run.json` files. To check the reference run, check out the commit in `analytic/reference/run.json`, run `cargo run --release -p gb-cli -- analytic`, and compare the new run's `run.json` with the reference one.

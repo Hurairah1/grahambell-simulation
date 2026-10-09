@@ -1,0 +1,4 @@
+test,trials,statistic,p_value,passes
+"winning-step distribution, real entropy vs stand-in (two-sample χ², 10 bins)",4000,9.775994098794802,0.3689224117423321,true
+real entropy uniform (KS on the top 53 bits),4000,0.014434728226537796,0.3727704814599919,true
+stand-in entropy uniform (KS on the top 53 bits),4000,0.014511139511068638,0.36633387617938734,true

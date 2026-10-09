@@ -1,0 +1,5 @@
+experiment,pairs,sorted_hex_collisions,fixed_order_collisions
+header: previous hash and reward wallet swapped (32 bytes each),10000,10000,0
+header: height and KWC ID swapped (8 bytes each),10000,10000,0
+"chain step: height and nonce swapped, timestamps matched",10000,10000,0
+random distinct headers,10000,0,0
