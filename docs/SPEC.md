@@ -1,6 +1,6 @@
 # GrahamBell — Stage 1 Simulation Specification
 
-**Version:** 0.5 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, 2026-10-06, 2026-10-07 and 2026-10-08, see the Changelog at the end)
+**Version:** 0.6 (compiled from the protocol architect's papers and design decisions; amended 2026-10-05, 2026-10-06, 2026-10-07, 2026-10-08 and 2026-10-09, see the Changelog at the end)
 **Owner:** Hurairah Shamsi, Protocol Architect
 **Purpose of this file:** single source of truth for building and running the Stage 1 simulation. Where this file and older papers disagree, **this file wins**. Where this file is silent or ambiguous, the implementer must **stop and ask**, not guess.
 
@@ -146,6 +146,8 @@ Fixed contents for the round, including: candidate public key, reward wallet, /6
 4. The aggregate **must include every online member's signature**. A missing online signature triggers One Chance (§4.5). Online members must number at least the quorum.
 5. `E` is committed into the header. The header is then immutable for the round.
 
+**Optimistic verification [P].** A witness verifies the entropy aggregate once. Only if that fails does it verify the shares one by one to find the bad signature. The honest case therefore costs one aggregate verification per miner per round; M4/M5 load models use this.
+
 Rules:
 
 - **One header per miner per round.** Two headers signed by the same miner key in the same round are proof of equivocation and grounds for a ban.
@@ -173,9 +175,13 @@ Validators check: quorum signatures with bitfield and proof of possession; full 
 
 **PoWit arrival deadline [O].** A PoW-ID block whose PoWit (the quorum signatures) is not received within D seconds of the block's timestamp is invalid and is not extended. D has no default yet and is swept (§2); M3 measures its effect.
 
-**Fork choice.** The longest valid chain, where every block must carry a valid PoWit; two valid blocks at the same height are resolved by the lower block hash [P].
+**Fork choice**, in this order (every block must carry a valid PoWit):
 
-**Same-height tie-break [P]:** if two valid PoW-ID blocks arrive for the same height, keep the one with the lower block hash. The rule is deterministic, so network latency cannot influence it. Compare against first-seen in M3.
+1. The longest valid chain.
+2. At the same height, the block with the earlier timestamp (the smaller winning step N) wins.
+3. At the same height and timestamp, the block with the lower block hash wins [P].
+
+**Same-height tie-break [P]:** steps 2 and 3 above. The rule is deterministic, so network latency cannot influence it. Compare against first-seen in M3.
 
 The confirmation depth stays as in §2. M1 finds that same-step ties end about 1.66% of rounds at the 30 s target; M3 measures the resulting fork and orphan rate under both tie-break rules.
 
@@ -293,6 +299,7 @@ If an online member's signature is missing from a miner's aggregate, every other
 - **Voting pool.** The full 40-member KWC votes on bans, MOBu/MOBr and offline requests. The subordinate-only proposer (§4.4) only proposes.
 - **[P] Unreachable is not refusal.** A member that cannot be reached is treated as offline under the allowance; a ban requires proof it refused while demonstrably online. Implement both this rule and the strict alternative (ban on failed One Chance) for comparison.
 - **Conflicting decisions [D].** If two conflicting KWC decisions are both approved, both are rejected. A member who signed both has produced equivocation evidence and may be banned.
+- **Witness double-signing [D].** A witness that signs PoWits for two different blocks from the same miner at the same height has produced equivocation evidence, and is banned under the rules above.
 
 ### 4.7 Offline handling [D rules, O values]
 
@@ -352,7 +359,7 @@ The adversary cannot: break SHA-256 or BLS12-381 security; forge signatures.
 
 **B. Entropy and pacing integrity**
 
-- **S11** Grinding: (a) old flow with miner signing last using non-unique signatures; (b) subset selection; (c) colluding last witness; (d) header equivocation; (e) current BLS all-online-members flow. Expected: advantage in (a)–(c), detection in (d), none in (e).
+- **S11** Grinding: (a) old flow with miner signing last using non-unique signatures; (b) subset selection; (c) colluding last witness; (d) header equivocation; (e) current BLS all-online-members flow; (f) the online-set lever: c colluding members choose among up to 2^c entropies by withholding, measured under the strict rule, under the [P] "unreachable is not refusal" rule (§4.6) and under threshold BLS entropy (§12). Expected: advantage in (a)–(c), detection in (d), none in (e); for (f), an advantage that ban rules can only price and threshold BLS entropy removes.
 - **S12** Early signing: fraction of KWCs capable of signing without honest members versus attacker share; detection via timestamp checks (§3.7); clock skew sweep.
 - **S13** Targeted delay of entropy: start rule (a) versus (b).
 - **S14** Sorted-hash collision test (separate unit test).
@@ -400,22 +407,22 @@ The adversary cannot: break SHA-256 or BLS12-381 security; forge signatures.
 
 ## 10. Pre-registered hypotheses
 
-Thresholds below are proposals. **The architect confirms them before results are generated, and results are published whether each passes or fails.**
+**Thresholds locked before M3, 2026-10-09** (architect). Results are published whether each passes or fails.
 
 - **H1 Linearity.** For every protocol-compliant attacker strategy in S1–S4, the amplification factor's 95% confidence interval lies within [0.95, 1.05].
 - **H2 Time floor.** With 100% issuance capture, time to 51% of active IDs matches the analytic value `(0.51/0.49) × H_active / R` within ±5%.
-- **H3 No grinding.** Under S11(e), no strategy reduces the expected winning step relative to an honest miner beyond statistical noise.
-- **H4 No restart advantage.** Under per-round entropy (S5 current), the restart strategy's advantage factor is ≤ 1.05.
-- **H5 Hopping.** Under Variant B, the hopping gain is ≤ 2%; report Variant A's gain.
-- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of distinct episodes in which a KWC can sign without honest members, over 10 years at 100,000 KWCs, is < 1. Stall fractions are reported without a threshold.
+- **H3 No grinding.** Under S11(e), the attacker's advantage over an honest miner has a 95% confidence interval that includes 1 and whose upper end is at most 1.02, with at least 10,000 trials.
+- **H4 No restart advantage.** Under per-round entropy (S5 current), the restart strategy's advantage factor is ≤ 1.02.
+- **H5 Hopping.** Under Variant B, including the correction M3 proposes, the hopping gain is ≤ 2%; report Variant A's gain.
+- **H6 Witness capture.** At attacker share ≤ 25%, the expected number of distinct episodes in which a KWC can sign without honest members, over 10 years at 100,000 KWCs, is < 1, for the unregistered quorum under the v0.4 seat rule with L = 30 days and M3's household profiles. Stall fractions are reported without a threshold.
   - *Meaning:* the attacker's seats alone meet the quorum. Such a KWC still cannot make an early-signed block valid beyond δ, because §3.7 rejects a block received before its own timestamp. Its powers are stalling and censoring miners in that KWC; entropy grinding needs every seat.
   - *Primary measure [D]:* **distinct episodes**, the expected number of times a KWC enters the state (entries into the state). Raw compositions in the state are reported as an upper bound.
   - *Refresh model:* compositions form when an ID is inserted (a new ID, or a returning ID whose seat was vacated: about 4.7 compositions each) and when an ID is removed (a ban, or an absence longer than L: about 4.6 each). Going offline within L changes no composition (§4.7). The v0.2 count (about R/10 new KWCs per year, plus 4 per ban replacement) is reported as a comparison.
   - *Ban rate:* 0 per year in the base case; 1% and 5% of registered IDs per year as labelled sensitivities.
   - Report for both quorums: the unregistered quorum governs PoW-ID, the registered quorum governs PoW-Tx.
-- **H7 Honest attrition.** Under a realistic household downtime profile, IDs lost per year without misbehaviour ≤ 1% for the chosen offline parameters.
-- **H8 Griefing.** Under the §4.6 [P] rule, griefing bans of honest witnesses are impossible; report the cost per victim under the strict rule.
-- **H9 Cost.** Report the money required for an attacker to hold 33% and 51% of active IDs for one year at several honest network sizes (no threshold; reported).
+- **H7 Honest attrition.** IDs lost per year without misbehaviour ≤ 1%, under both M3 regional profiles (reliable and unreliable grid), for the chosen offline parameters.
+- **H8 Griefing.** Under the §4.6 [P] rule, zero griefing bans of honest witnesses; report the cost per victim under the strict rule.
+- **H9 Cost.** Report the money required for an attacker to hold 33% and 51% of active IDs for one year at 1M and 10M honest active IDs (no threshold; reported).
 
 ---
 
@@ -454,6 +461,7 @@ Thresholds below are proposals. **The architect confirms them before results are
   - (b) **Larger KWCs**, for example 60 or 100 seats. M1 section I maps the trade-off.
   - (c) **Threshold BLS entropy:** any quorum of members produce the same signature, which removes the single-member entropy stall and entropy grinding. M2 measures the key-setup cost.
   - Decisions that validators cannot recompute (bans, MOBu/MOBr, offline requests, committee records) remain bound by the one-third limit and rely on the ban rules.
+- **Online-set grinding lever (found in M2 C1(c′)).** Entropy comes from every online member, so c colluding members can choose among up to 2^c entropies by deciding who withholds; M2 measured 1.88× for one member. The [P] "unreachable is not refusal" rule (§4.6) makes withholding nearly free. M4 measures the lever (S11(f)) under the strict rule, under the [P] rule and under threshold BLS entropy, which removes it. **Threshold BLS entropy is the leading M4 candidate.**
 - **[P] Witness peer topology (option 2).** No persistent witness-to-witness connections: the miner relays routine messages. Members connect on demand, through the global directory of member addresses, only for One Chance, decisions (MOBu/MOBr, offline requests, bans), proposer duties and catch-up. Online status comes from the network record, not from heartbeats: a member counts as online until an offline request is recorded, by the member itself or by its KWC proposer after One Chance fails. Address changes are announced network-wide and update the directory. M1 section I estimates the on-demand connections; M3/M4 measure how often a member that disappears without announcing it stalls its KWCs' entropy until One Chance fails (about one grace epoch). The alternative is persistent connections among all members of a node's KWCs.
 
 ---
@@ -498,7 +506,7 @@ Byte layouts that `gb-protocol` and its test vectors follow. They are proposed, 
   | difficulty target (256-bit) | 32 |
 
   The header is 173 bytes. Mainnet uses address type 0 only; type 1 exists for the §13 testnet.
-- **Digests.** `header_digest = SHA256("GB/header" ‖ header)`. Block hash = `SHA256("GB/block" ‖ header ‖ E ‖ N)`, with N as a u64; the same-height tie-break compares block hashes as 256-bit integers.
+- **Digests.** `header_digest = SHA256("GB/header" ‖ header)`. Block hash = `SHA256("GB/block" ‖ header ‖ E ‖ N)`, with N as a u64; the last step of the same-height tie-break compares block hashes as 256-bit integers.
 - **Hash chain (§3.5).** `prev_hash` 32 bytes, height u64, timestamps u64 seconds, nonce u64, E 32 bytes, header_digest 32 bytes. A step wins when `h_n`, read as a 256-bit integer, is below the target.
 - **Signer bitfield.** One bit per KWC seat in seat order: the leader WC's seats 0–9, then each subordinate WC's seats 0–9 in ring-offset order. Bit i is bit (i mod 8) of byte ⌊i/8⌋, least significant first; 40 seats take 5 bytes.
 - **PoWit.** Members sign `"GB/powit" ‖ block hash`; the PoWit carries the aggregate signature (96 bytes) and the signer bitfield.
@@ -508,6 +516,16 @@ Byte layouts that `gb-protocol` and its test vectors follow. They are proposed, 
 ---
 
 ## Changelog
+
+### v0.6 — 2026-10-09
+
+Decisions by the protocol architect on the M2 results.
+
+- **§10.** H1–H9 thresholds locked before M3, 2026-10-09: H1 and H2 unchanged; H3 CI includes 1 with upper end ≤ 1.02 and at least 10,000 trials; H4 ≤ 1.02; H5 ≤ 2% including the M3 correction; H6 < 1 episode at p ≤ 25%, 100k KWCs, L = 30 days with M3 profiles; H7 ≤ 1% per year under both regional profiles; H8 zero griefing bans under the [P] rule; H9 reported at 1M and 10M IDs.
+- **§8 S11(f) and §12.** The online-set grinding lever found in M2 C1(c′): c colluding members choose among up to 2^c entropies by withholding. M4 measures it under the strict rule, the [P] rule and threshold BLS entropy; threshold BLS entropy is the leading M4 candidate.
+- **§3.4 [P].** Optimistic verification of the entropy aggregate (verify once; verify shares only on failure), used in the M4/M5 load model.
+- **§3.7.** Fork choice in a precise order: longest valid chain; then the earlier timestamp (smaller N); then the lower block hash [P].
+- **§4.6 [D].** A witness that signs PoWits for two different blocks from the same miner at the same height has produced equivocation evidence and is banned.
 
 ### v0.5 — 2026-10-08
 
