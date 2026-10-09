@@ -16,7 +16,10 @@ use crate::entropy::{
 use crate::error::ProtocolError;
 use crate::hash::{Hash, tagged, to_hex};
 use crate::issuance::variant_b_target;
-use crate::validate::{Block, KwcKeys, QuorumRule, Reception, Rejection, Rules, Tip, validate};
+use crate::validate::{
+    Block, ForkCandidate, KwcKeys, QuorumRule, Reception, Rejection, Rules, Tip, fork_choice,
+    validate, witness_equivocators,
+};
 use serde_json::{Value, json};
 
 /// File name of the vectors, in `crates/gb-protocol/vectors/`.
@@ -162,6 +165,59 @@ pub fn generate() -> Result<Value, ProtocolError> {
         { "case": "timestamp is t0 + N + 1", "block_at": ts + 1.0, "powit_at": ts + 1.0, "verdict": check(&wrong_time, ts + 1.0, ts + 1.0) },
     ]);
 
+    // Witness double-signing (§4.6): a second block from the same miner at the same height, its
+    // PoWit signed by seats 1, 2 and 3, against the first block's seats 0, 1 and 2.
+    let mut second = block.clone();
+    second.header.reward_wallet = seed("wallet", 1);
+    let second_hash = second.hash();
+    let second_msg = powit_message(&second_hash);
+    let second_sigs: Vec<SignatureBytes> =
+        members[1..].iter().map(|k| k.sign(&second_msg)).collect();
+    second.powit_signers = Bitfield::from_seats(4, &[1, 2, 3]);
+    second.powit_aggregate = aggregate(&second_sigs)?;
+    let witness_equivocation = json!({
+        "first_block_hash": to_hex(&bhash),
+        "first_powit_signers": to_hex(block.powit_signers.as_bytes()),
+        "second_block_hash": to_hex(&second_hash),
+        "second_powit_signers": to_hex(second.powit_signers.as_bytes()),
+        "second_powit_aggregate": to_hex(&second.powit_aggregate),
+        "equivocating_seats": witness_equivocators(&block, &second, &kwc),
+    });
+
+    // Fork choice (§3.7): longest chain, then earlier timestamp, then lower hash.
+    let candidate = |height: u64, timestamp: u64, label: &str| ForkCandidate {
+        height,
+        timestamp,
+        hash: seed(label, 0),
+    };
+    let fork_cases: Vec<Value> = [
+        (
+            "longer chain wins",
+            candidate(11, 2_000, "fork-a"),
+            candidate(10, 1_000, "fork-b"),
+        ),
+        (
+            "same height: earlier timestamp wins",
+            candidate(10, 1_005, "fork-c"),
+            candidate(10, 1_006, "fork-d"),
+        ),
+        (
+            "same height and timestamp: lower hash wins",
+            candidate(10, 1_005, "fork-e"),
+            candidate(10, 1_005, "fork-f"),
+        ),
+    ]
+    .iter()
+    .map(|(case, a, b)| {
+        json!({
+            "case": case,
+            "a": { "height": a.height, "timestamp": a.timestamp, "hash": to_hex(&a.hash) },
+            "b": { "height": b.height, "timestamp": b.timestamp, "hash": to_hex(&b.hash) },
+            "preferred": if fork_choice(a, b) == std::cmp::Ordering::Greater { "b" } else { "a" },
+        })
+    })
+    .collect();
+
     let allocation: Vec<Value> = [(0u64, 0u64), (1, 9), (2, 999), (3, 2_899_999)]
         .iter()
         .map(|(i, filled)| {
@@ -217,6 +273,8 @@ pub fn generate() -> Result<Value, ProtocolError> {
             "aggregate": to_hex(&block.powit_aggregate),
         },
         "validation": verdicts,
+        "witness_equivocation": witness_equivocation,
+        "fork_choice": fork_cases,
         "allocation": allocation,
         "committee": committee,
         "issuance": issuance,

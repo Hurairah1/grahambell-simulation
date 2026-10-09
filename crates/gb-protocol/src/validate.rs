@@ -238,10 +238,59 @@ pub fn may_sign(own_clock: f64, t0: u64, winning_step: u64, clock_tolerance_s: f
     own_clock >= (t0 + winning_step) as f64 - clock_tolerance_s
 }
 
-/// SPEC §3.7 same-height tie-break \[P\]: the block with the lower hash wins. Returns
-/// `Ordering::Less` when `a` is preferred.
-pub fn prefer(a: &Hash, b: &Hash) -> Ordering {
-    a.cmp(b)
+/// A chain tip as fork choice sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ForkCandidate {
+    /// Height of the tip.
+    pub height: u64,
+    /// Timestamp of the tip block (`t0 + N`).
+    pub timestamp: u64,
+    /// Block hash of the tip.
+    pub hash: Hash,
+}
+
+/// SPEC §3.7 fork choice between two valid tips, in order: the longer chain; at the same
+/// height, the earlier timestamp (smaller winning step N); at the same height and timestamp,
+/// the lower block hash \[P\]. Returns `Ordering::Less` when `a` is preferred.
+pub fn fork_choice(a: &ForkCandidate, b: &ForkCandidate) -> Ordering {
+    b.height
+        .cmp(&a.height)
+        .then(a.timestamp.cmp(&b.timestamp))
+        .then(a.hash.cmp(&b.hash))
+}
+
+/// SPEC §3.7 same-height tie-break: the earlier timestamp wins, then the lower block hash
+/// \[P\]. Arguments are `(timestamp, block hash)`; returns `Ordering::Less` when `a` is
+/// preferred.
+pub fn prefer(a: (u64, &Hash), b: (u64, &Hash)) -> Ordering {
+    a.0.cmp(&b.0).then(a.1.cmp(b.1))
+}
+
+/// SPEC §4.6 witness double-signing \[D\]: the seats that signed valid PoWits for two
+/// different blocks from the same miner at the same height. Each PoWit aggregate is verified,
+/// and proofs of possession (checked by [`KwcKeys::new`]) make every marked signer accountable
+/// for its signature. Returns no seats unless both aggregates verify.
+pub fn witness_equivocators(a: &Block, b: &Block, kwc: &KwcKeys) -> Vec<usize> {
+    let (ha, hb) = (a.hash(), b.hash());
+    let same_round = a.header.height == b.header.height
+        && a.header.candidate_pk == b.header.candidate_pk
+        && ha != hb;
+    let valid = |block: &Block, hash: &Hash| {
+        verify_same_message(
+            kwc.keys(),
+            &block.powit_signers,
+            &powit_message(hash),
+            &block.powit_aggregate,
+        )
+    };
+    if !same_round || !valid(a, &ha) || !valid(b, &hb) {
+        return Vec::new();
+    }
+    a.powit_signers
+        .signers()
+        .into_iter()
+        .filter(|seat| b.powit_signers.get(*seat))
+        .collect()
 }
 
 /// Validates `block` on `tip` (SPEC §3.7). `unique` reports whether the candidate key and the
@@ -331,6 +380,7 @@ pub(crate) mod tests {
         pub(crate) block: Block,
         pub(crate) tip: Tip,
         pub(crate) kwc: KwcKeys,
+        pub(crate) members: Vec<Keypair>,
         pub(crate) quorum: QuorumRule,
     }
 
@@ -389,6 +439,7 @@ pub(crate) mod tests {
             block,
             tip,
             kwc,
+            members,
             quorum,
         }
     }
@@ -536,8 +587,96 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_lower_block_hash_wins_a_tie() {
-        assert_eq!(prefer(&[1; 32], &[2; 32]), Ordering::Less);
+    fn fork_choice_prefers_length_then_earlier_timestamp_then_lower_hash() {
+        let c = |height, timestamp, h: u8| ForkCandidate {
+            height,
+            timestamp,
+            hash: [h; 32],
+        };
+        // Longer chain wins even with a later timestamp and higher hash.
+        assert_eq!(
+            fork_choice(&c(11, 2_000, 9), &c(10, 1_000, 1)),
+            Ordering::Less
+        );
+        // Same height: earlier timestamp (smaller N) wins even with a higher hash.
+        assert_eq!(
+            fork_choice(&c(10, 1_005, 9), &c(10, 1_006, 1)),
+            Ordering::Less
+        );
+        // Same height and timestamp: lower hash wins.
+        assert_eq!(
+            fork_choice(&c(10, 1_005, 1), &c(10, 1_005, 2)),
+            Ordering::Less
+        );
+        assert_eq!(prefer((1_005, &[9; 32]), (1_006, &[1; 32])), Ordering::Less);
+        assert_eq!(prefer((1_005, &[1; 32]), (1_005, &[2; 32])), Ordering::Less);
+    }
+
+    #[test]
+    fn only_the_first_winning_step_is_valid() {
+        // Full recomputation finds the first step below the target; presenting a later step
+        // that also meets the target is rejected.
+        let f = fixture(4, pool(4, 3));
+        let t0 = f.tip.timestamp + 1;
+        let inputs = ChainInputs::new(&f.block.header, f.block.entropy(), t0);
+        let later = inputs
+            .steps()
+            .skip(f.block.winning_step as usize + 1)
+            .take(100_000)
+            .find(|(_, h)| below_target(h, &f.block.header.target))
+            .map(|(n, _)| n)
+            .unwrap();
+        let mut b = f.block.clone();
+        b.winning_step = later;
+        b.timestamp = t0 + later;
+        assert_eq!(
+            run(&f, &b, on_time(&b), rules(None)),
+            Err(Rejection::EarlierWinningStep)
+        );
+    }
+
+    /// A second block from the same miner at the same height (a different header), with a
+    /// PoWit signed by `signers`.
+    fn second_block(f: &Fixture, signers: &[usize]) -> Block {
+        let mut b = f.block.clone();
+        b.header.reward_wallet[0] ^= 1;
+        let msg = powit_message(&b.hash());
+        let sigs: Vec<SignatureBytes> = signers.iter().map(|i| f.members[*i].sign(&msg)).collect();
+        b.powit_signers = Bitfield::from_seats(f.members.len(), signers);
+        b.powit_aggregate = aggregate(&sigs).unwrap();
+        b
+    }
+
+    #[test]
+    fn witnesses_who_sign_two_blocks_of_one_miner_at_one_height_are_found() {
+        let f = fixture(4, pool(4, 3));
+        // The fixture's PoWit is signed by all four seats.
+        let b = second_block(&f, &[1, 2, 3]);
+        assert_eq!(witness_equivocators(&f.block, &b, &f.kwc), vec![1, 2, 3]);
+        // Nobody is flagged for the same block twice.
+        assert!(witness_equivocators(&f.block, &f.block, &f.kwc).is_empty());
+        // Different heights or different miners are not equivocation.
+        let mut c = b.clone();
+        c.header.height += 1;
+        assert!(witness_equivocators(&f.block, &c, &f.kwc).is_empty());
+        let mut d = b.clone();
+        d.header.candidate_pk = f.members[0].public;
+        assert!(witness_equivocators(&f.block, &d, &f.kwc).is_empty());
+        // A forged aggregate proves nothing.
+        let mut e = b.clone();
+        e.powit_signers = Bitfield::from_seats(4, &[0, 1, 2, 3]);
+        assert!(witness_equivocators(&f.block, &e, &f.kwc).is_empty());
+    }
+
+    #[test]
+    fn disjoint_signers_are_not_flagged() {
+        let mut f = fixture(4, pool(4, 2));
+        let msg = powit_message(&f.block.hash());
+        let sigs: Vec<SignatureBytes> = f.members[..2].iter().map(|k| k.sign(&msg)).collect();
+        f.block.powit_signers = Bitfield::from_seats(4, &[0, 1]);
+        f.block.powit_aggregate = aggregate(&sigs).unwrap();
+        let b = second_block(&f, &[2, 3]);
+        assert!(witness_equivocators(&f.block, &b, &f.kwc).is_empty());
     }
 
     #[test]

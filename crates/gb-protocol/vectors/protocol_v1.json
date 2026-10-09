@@ -79,6 +79,50 @@
     "miner_signature": "828c4e83c80e30c0fca6c2e5b88cfeee4e44a1fabda4ba357d57d658ec38c3e2031780b4d549e5601969d0dbb3d110b1070632e49b2393da7317b72a34205ea214a35053efc04fd01bea09a2b8b95e1f943e713f4071d47e71bbf5d5a2c5f670",
     "signer_bitfield": "0f"
   },
+  "fork_choice": [
+    {
+      "a": {
+        "hash": "d1b80affffe36a0ed155aae2c3e155e356fd2ae1f7c12db37a9c7125c8a86198",
+        "height": 11,
+        "timestamp": 2000
+      },
+      "b": {
+        "hash": "a93086843dba45e64a2b288313d3188118d3401990a7251f626694f75ea73c63",
+        "height": 10,
+        "timestamp": 1000
+      },
+      "case": "longer chain wins",
+      "preferred": "a"
+    },
+    {
+      "a": {
+        "hash": "b7761176f90d8ad4bd43e714f7a646959fc1f6b58f14853b6efa8b605a6cca4b",
+        "height": 10,
+        "timestamp": 1005
+      },
+      "b": {
+        "hash": "0a035874a06c4953e285f5e7878ea71c34b925083c1c7d9d34b13d17fb000117",
+        "height": 10,
+        "timestamp": 1006
+      },
+      "case": "same height: earlier timestamp wins",
+      "preferred": "a"
+    },
+    {
+      "a": {
+        "hash": "2985d560b6ddd89dd8417347f028136f162dcf85ccd8acd596839e9a86853054",
+        "height": 10,
+        "timestamp": 1005
+      },
+      "b": {
+        "hash": "e3fca0a1f20ae4136255bff6e671fda2e26e6e96c4a493ddcde5410f07193af8",
+        "height": 10,
+        "timestamp": 1005
+      },
+      "case": "same height and timestamp: lower hash wins",
+      "preferred": "a"
+    }
+  ],
   "headers": [
     {
       "address": "20010db800000001",
@@ -182,5 +226,16 @@
       "powit_at": 1009.0,
       "verdict": "TimestampMismatch"
     }
-  ]
+  ],
+  "witness_equivocation": {
+    "equivocating_seats": [
+      1,
+      2
+    ],
+    "first_block_hash": "dbc25d956470d96c4b070c85344d3aad3c64b6ccd569d87a574d8e6335612dfc",
+    "first_powit_signers": "07",
+    "second_block_hash": "d0469edd394fb06966dccdd9dceaf99947c010758fa375ec81d2200b7494b2db",
+    "second_powit_aggregate": "9995399586cb51327bb39b8601ece69d71204ec517c914ea82587eadb136b7f81d33f38245abb823d9dd83d93b46189411ad49d97628886cfb950183c342392682e0df2e0dd431e35531093eb562383cb35f3615f3522dc03f08de3652fcbd63",
+    "second_powit_signers": "0e"
+  }
 }
